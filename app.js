@@ -30,7 +30,8 @@ let appState = {
     loadedTimezones: new Set(), // Para lazy loading
     activeAlarmInterval: null, // Intervalo de la alarma sonando
     activeAlarmOscillators: [], // Osciladores activos para detenerlos
-    currentActiveAlarm: null // Alarma que está sonando actualmente
+    currentActiveAlarm: null, // Alarma que está sonando actualmente
+    isStoppingAlarm: false // Bandera para prevenir creación de nuevos osciladores durante detención
 };
 
 // Inicialización
@@ -77,23 +78,46 @@ async function requestNotificationPermission() {
 // ============================================
 let globalAudioContext = null;
 
-function initAudioContext() {
+function initAudioContext(forceResume = true) {
     if (!globalAudioContext) {
         globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
     
+    // NO reanudar automáticamente si se está deteniendo la alarma
+    if (appState.isStoppingAlarm) {
+        console.log('⏸️ Deteniendo alarma - no se reanudará AudioContext');
+        return globalAudioContext;
+    }
+    
     // Intentar reanudar si está suspendido (común en navegadores modernos)
-    if (globalAudioContext.state === 'suspended') {
+    // PERO solo si forceResume es true (para evitar reanudar durante detención)
+    if (forceResume && globalAudioContext.state === 'suspended') {
         globalAudioContext.resume().then(() => {
             console.log('AudioContext reanudado por interacción de usuario');
+        }).catch(e => {
+            console.log('Error al reanudar AudioContext:', e.message);
         });
     }
+    
+    return globalAudioContext;
 }
 
-// Desbloquear audio en cualquier interacción
-document.addEventListener('click', initAudioContext, { once: false });
-document.addEventListener('touchstart', initAudioContext, { once: false });
-document.addEventListener('keydown', initAudioContext, { once: false });
+// Desbloquear audio en cualquier interacción (pero no durante detención de alarma)
+document.addEventListener('click', () => {
+    if (!appState.isStoppingAlarm) {
+        initAudioContext();
+    }
+}, { once: false });
+document.addEventListener('touchstart', () => {
+    if (!appState.isStoppingAlarm) {
+        initAudioContext();
+    }
+}, { once: false });
+document.addEventListener('keydown', () => {
+    if (!appState.isStoppingAlarm) {
+        initAudioContext();
+    }
+}, { once: false });
 
 // El event listener para detener alarma se configura en setupEventListeners()
 
@@ -690,108 +714,301 @@ function updateSyncStatus(message, status) {
 
 function setupEventListeners() {
     // Toggle configuración
-    document.getElementById('settingsToggle').addEventListener('click', () => {
-        const panel = document.getElementById('settingsPanel');
-        panel.classList.toggle('hidden');
-    });
+    const settingsToggle = document.getElementById('settingsToggle');
+    if (settingsToggle) {
+        settingsToggle.addEventListener('click', () => {
+            const panel = document.getElementById('settingsPanel');
+            if (panel) panel.classList.toggle('hidden');
+        });
+    }
     
     // Toggle tema
-    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+    }
     
     // Configuración
-    document.getElementById('showSeconds').addEventListener('change', (e) => {
-        appState.showSeconds = e.target.checked;
-        saveConfig();
-        updateAllClocks();
-    });
+    const showSeconds = document.getElementById('showSeconds');
+    if (showSeconds) {
+        showSeconds.addEventListener('change', (e) => {
+            appState.showSeconds = e.target.checked;
+            saveConfig();
+            updateAllClocks();
+        });
+    }
     
-    document.getElementById('hourFormat').addEventListener('change', (e) => {
-        appState.hourFormat = e.target.value;
-        if (appState.hourFormat === 'auto') {
-            appState.hourFormat = detectSystemHourFormatValue();
-        }
-        saveConfig();
-        updateAllClocks();
-    });
+    const hourFormat = document.getElementById('hourFormat');
+    if (hourFormat) {
+        hourFormat.addEventListener('change', (e) => {
+            appState.hourFormat = e.target.value;
+            if (appState.hourFormat === 'auto') {
+                appState.hourFormat = detectSystemHourFormatValue();
+            }
+            saveConfig();
+            updateAllClocks();
+        });
+    }
     
     // Configuración de notificaciones
-    document.getElementById('enableNotifications').addEventListener('change', (e) => {
-        appState.notificationsEnabled = e.target.checked;
-        saveConfig();
-    });
+    const enableNotifications = document.getElementById('enableNotifications');
+    if (enableNotifications) {
+        enableNotifications.addEventListener('change', (e) => {
+            appState.notificationsEnabled = e.target.checked;
+            saveConfig();
+        });
+    }
     
-    document.getElementById('alarmSound').addEventListener('change', (e) => {
-        appState.alarmSound = e.target.value;
-        saveConfig();
-    });
+    const alarmSound = document.getElementById('alarmSound');
+    if (alarmSound) {
+        alarmSound.addEventListener('change', (e) => {
+            appState.alarmSound = e.target.value;
+            saveConfig();
+        });
+    }
     
-    document.getElementById('enableVibration').addEventListener('change', (e) => {
-        appState.vibrationEnabled = e.target.checked;
-        saveConfig();
-    });
+    const enableVibration = document.getElementById('enableVibration');
+    if (enableVibration) {
+        enableVibration.addEventListener('change', (e) => {
+            appState.vibrationEnabled = e.target.checked;
+            saveConfig();
+        });
+    }
     
-    document.getElementById('dndMode').addEventListener('change', (e) => {
-        appState.dndMode = e.target.value;
-        saveConfig();
-    });
+    const dndMode = document.getElementById('dndMode');
+    if (dndMode) {
+        dndMode.addEventListener('change', (e) => {
+            appState.dndMode = e.target.value;
+            saveConfig();
+        });
+    }
     
     // Vistas de visualización
-    document.getElementById('cardViewBtn').addEventListener('click', () => switchView('cards'));
-    document.getElementById('mapViewBtn').addEventListener('click', () => switchView('map'));
-    document.getElementById('compareViewBtn').addEventListener('click', () => switchView('compare'));
+    const cardViewBtn = document.getElementById('cardViewBtn');
+    if (cardViewBtn) {
+        cardViewBtn.addEventListener('click', () => switchView('cards'));
+    }
     
-    document.getElementById('syncTimeBtn').addEventListener('click', syncWithServer);
+    const mapViewBtn = document.getElementById('mapViewBtn');
+    if (mapViewBtn) {
+        mapViewBtn.addEventListener('click', () => switchView('map'));
+    }
+    
+    const compareViewBtn = document.getElementById('compareViewBtn');
+    if (compareViewBtn) {
+        compareViewBtn.addEventListener('click', () => switchView('compare'));
+    }
+    
+    const syncTimeBtn = document.getElementById('syncTimeBtn');
+    if (syncTimeBtn) {
+        syncTimeBtn.addEventListener('click', syncWithServer);
+    }
     
     // Agregar zona horaria
-    document.getElementById('addTimezoneBtn').addEventListener('click', () => {
-        document.getElementById('timezoneModal').classList.remove('hidden');
-        document.getElementById('cityNameInput').value = '';
-        document.getElementById('timezoneSelect').value = '';
-    });
+    const addTimezoneBtn = document.getElementById('addTimezoneBtn');
+    if (addTimezoneBtn) {
+        addTimezoneBtn.addEventListener('click', () => {
+            const timezoneModal = document.getElementById('timezoneModal');
+            if (timezoneModal) timezoneModal.classList.remove('hidden');
+            const cityNameInput = document.getElementById('cityNameInput');
+            if (cityNameInput) cityNameInput.value = '';
+            const timezoneSelect = document.getElementById('timezoneSelect');
+            if (timezoneSelect) timezoneSelect.value = '';
+        });
+    }
     
     // Guardar zona horaria
-    document.getElementById('saveTimezoneBtn').addEventListener('click', saveTimezone);
-    document.getElementById('cancelTimezoneBtn').addEventListener('click', () => {
-        document.getElementById('timezoneModal').classList.add('hidden');
-    });
+    const saveTimezoneBtn = document.getElementById('saveTimezoneBtn');
+    if (saveTimezoneBtn) {
+        saveTimezoneBtn.addEventListener('click', saveTimezone);
+    }
+    
+    const cancelTimezoneBtn = document.getElementById('cancelTimezoneBtn');
+    if (cancelTimezoneBtn) {
+        cancelTimezoneBtn.addEventListener('click', () => {
+            const timezoneModal = document.getElementById('timezoneModal');
+            if (timezoneModal) timezoneModal.classList.add('hidden');
+        });
+    }
     
     // Alarmas
-    document.getElementById('addAlarmBtn').addEventListener('click', () => {
-        document.getElementById('alarmModal').classList.remove('hidden');
-        populateAlarmTimezoneSelect();
-    });
+    const addAlarmBtn = document.getElementById('addAlarmBtn');
+    if (addAlarmBtn) {
+        addAlarmBtn.addEventListener('click', () => {
+            const alarmModal = document.getElementById('alarmModal');
+            if (alarmModal) alarmModal.classList.remove('hidden');
+            populateAlarmTimezoneSelect();
+        });
+    }
     
-    document.getElementById('saveAlarmBtn').addEventListener('click', saveAlarm);
-    document.getElementById('cancelAlarmBtn').addEventListener('click', () => {
-        document.getElementById('alarmModal').classList.add('hidden');
-    });
+    const saveAlarmBtn = document.getElementById('saveAlarmBtn');
+    if (saveAlarmBtn) {
+        saveAlarmBtn.addEventListener('click', saveAlarm);
+    }
     
-    // Créditos
-    document.getElementById('creditsBtn').addEventListener('click', () => {
-        document.getElementById('creditsModal').classList.remove('hidden');
-    });
+    const cancelAlarmBtn = document.getElementById('cancelAlarmBtn');
+    if (cancelAlarmBtn) {
+        cancelAlarmBtn.addEventListener('click', () => {
+            const alarmModal = document.getElementById('alarmModal');
+            if (alarmModal) alarmModal.classList.add('hidden');
+        });
+    }
     
-    document.getElementById('closeCreditsBtn').addEventListener('click', () => {
-        document.getElementById('creditsModal').classList.add('hidden');
-    });
+    // Créditos (verificar que los elementos existan)
+    const creditsBtn = document.getElementById('creditsBtn');
+    if (creditsBtn) {
+        creditsBtn.addEventListener('click', () => {
+            const creditsModal = document.getElementById('creditsModal');
+            if (creditsModal) {
+                creditsModal.classList.remove('hidden');
+            }
+        });
+    }
+    
+    const closeCreditsBtn = document.getElementById('closeCreditsBtn');
+    if (closeCreditsBtn) {
+        closeCreditsBtn.addEventListener('click', () => {
+            const creditsModal = document.getElementById('creditsModal');
+            if (creditsModal) {
+                creditsModal.classList.add('hidden');
+            }
+        });
+    }
     
     // Cerrar modal al hacer clic fuera
-    document.getElementById('creditsModal').addEventListener('click', (e) => {
-        if (e.target.id === 'creditsModal') {
-            document.getElementById('creditsModal').classList.add('hidden');
-        }
-    });
+    const creditsModal = document.getElementById('creditsModal');
+    if (creditsModal) {
+        creditsModal.addEventListener('click', (e) => {
+            if (e.target.id === 'creditsModal') {
+                creditsModal.classList.add('hidden');
+            }
+        });
+    }
     
     // Desbloquear audio en la primera interacción del usuario
     ['click', 'touchstart', 'keydown'].forEach(event => {
         document.body.addEventListener(event, unlockAudio, { once: true });
     });
     
-    // Botón para detener alarma
+    // Función wrapper para asegurar que stopAlarm se ejecute
+    const handleStopAlarm = (e) => {
+        // Verificar que el click fue en el botón o en sus hijos
+        const target = e.target;
+        const stopAlarmBtn = document.getElementById('stopAlarmBtn');
+        
+        if (!stopAlarmBtn) {
+            console.error('❌ Botón stopAlarmBtn no encontrado');
+            return;
+        }
+        
+        // Verificar que el click fue en el botón o dentro de él
+        if (target !== stopAlarmBtn && !stopAlarmBtn.contains(target)) {
+            return; // No fue click en el botón
+        }
+        
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🖱️ Evento detectado en botón "Apagar Alarma" - llamando stopAlarm()');
+        console.log('🔍 Estado actual:', {
+            currentActiveAlarm: appState.currentActiveAlarm,
+            activeAlarmInterval: appState.activeAlarmInterval,
+            oscillatorsCount: appState.activeAlarmOscillators.length
+        });
+        
+        // Verificar que realmente hay una alarma activa
+        if (appState.currentActiveAlarm || appState.activeAlarmInterval || appState.activeAlarmOscillators.length > 0) {
+            console.log('✅ Hay alarma activa - deteniendo...');
+            stopAlarm();
+        } else {
+            console.log('⚠️ No hay alarma activa para detener');
+        }
+    };
+    
+    // Usar delegación de eventos a nivel de documento para asegurar que siempre funcione
+    // IMPORTANTE: Usar una función con nombre para poder removerla si es necesario
+    const documentClickHandler = (e) => {
+        const target = e.target;
+        const stopAlarmBtn = document.getElementById('stopAlarmBtn');
+        
+        if (!stopAlarmBtn) return;
+        
+        // Verificar si el click fue en el botón o en sus hijos
+        if (target === stopAlarmBtn || stopAlarmBtn.contains(target)) {
+            console.log('🎯 Click detectado en documento - verificando si es en botón...');
+            handleStopAlarm(e);
+        }
+    };
+    
+    document.addEventListener('click', documentClickHandler, true); // capture phase
+    
+    document.addEventListener('touchstart', (e) => {
+        const target = e.target;
+        const stopAlarmBtn = document.getElementById('stopAlarmBtn');
+        if (stopAlarmBtn && (target === stopAlarmBtn || stopAlarmBtn.contains(target))) {
+            console.log('👆 Touch detectado en botón');
+            e.preventDefault();
+            handleStopAlarm(e);
+        }
+    }, { passive: false });
+    
+    // También agregar directamente al botón como respaldo
     const stopAlarmBtn = document.getElementById('stopAlarmBtn');
     if (stopAlarmBtn) {
-        stopAlarmBtn.addEventListener('click', stopAlarm);
+        console.log('✅ Botón stopAlarmBtn encontrado en el DOM');
+        
+        // Agregar onclick directamente como atributo (más confiable)
+        stopAlarmBtn.onclick = handleStopAlarm;
+        
+        // También agregar event listeners normales
+        stopAlarmBtn.addEventListener('click', handleStopAlarm);
+        stopAlarmBtn.addEventListener('mousedown', handleStopAlarm);
+        
+        // Asegurar que el botón sea clickeable y visible
+        stopAlarmBtn.style.pointerEvents = 'auto';
+        stopAlarmBtn.style.cursor = 'pointer';
+        stopAlarmBtn.style.display = 'flex';
+        stopAlarmBtn.style.opacity = '1';
+        stopAlarmBtn.style.visibility = 'visible';
+        stopAlarmBtn.style.zIndex = '10000';
+        stopAlarmBtn.setAttribute('tabindex', '0');
+        
+        // Agregar soporte para teclado
+        stopAlarmBtn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleStopAlarm(e);
+            }
+        });
+        
+        // Listener de prueba para verificar que el botón recibe eventos
+        stopAlarmBtn.addEventListener('mouseenter', () => {
+            console.log('🖱️ Mouse sobre botón "Apagar Alarma"');
+        });
+        
+        stopAlarmBtn.addEventListener('mouseleave', () => {
+            console.log('🖱️ Mouse salió del botón "Apagar Alarma"');
+        });
+        
+        // Agregar listener para cualquier interacción
+        stopAlarmBtn.addEventListener('pointerenter', () => {
+            console.log('👆 Pointer sobre botón "Apagar Alarma"');
+        });
+        
+        // Verificar que el botón es clickeable
+        console.log('✅ Event listeners del botón "Apagar Alarma" configurados correctamente');
+        console.log('🔍 Verificación del botón:', {
+            exists: !!stopAlarmBtn,
+            onclick: typeof stopAlarmBtn.onclick,
+            hasListeners: stopAlarmBtn.onclick !== null,
+            computedStyle: window.getComputedStyle(stopAlarmBtn).display,
+            zIndex: window.getComputedStyle(stopAlarmBtn).zIndex
+        });
+    } else {
+        console.error('❌ No se encontró el botón stopAlarmBtn en el DOM');
     }
+    
+    // Hacer la función accesible globalmente para debugging
+    window.stopAlarmManually = stopAlarm;
 }
 
 function toggleTheme() {
@@ -981,16 +1198,80 @@ async function deleteAlarm(id) {
     }
 }
 
+// Función helper para verificar si la hora de la alarma ya pasó hoy
+function hasAlarmTimePassedToday(alarm) {
+    const now = new Date();
+    if (appState.timeOffset !== 0) {
+        now.setTime(now.getTime() + appState.timeOffset);
+    }
+    
+    // Obtener hora actual en la zona horaria de la alarma
+    const options = { 
+        timeZone: alarm.timezone, 
+        hour12: false, 
+        hour: 'numeric', 
+        minute: 'numeric' 
+    };
+    
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(now);
+    const nowH = parseInt(parts.find(p => p.type === 'hour').value);
+    const nowM = parseInt(parts.find(p => p.type === 'minute').value);
+    
+    // Obtener hora de la alarma
+    const [alarmH, alarmM] = alarm.time.split(':').map(Number);
+    
+    // Comparar: si la hora actual es mayor que la hora de la alarma, ya pasó
+    const nowMinutes = nowH * 60 + nowM;
+    const alarmMinutes = alarmH * 60 + alarmM;
+    
+    return nowMinutes > alarmMinutes;
+}
+
 function renderAlarms() {
     const container = document.getElementById('alarmsList');
+    if (!container) return;
+    
     container.innerHTML = '';
     
-    if (appState.alarms.length === 0) {
+    const now = new Date();
+    if (appState.timeOffset !== 0) {
+        now.setTime(now.getTime() + appState.timeOffset);
+    }
+    
+    // Filtrar alarmas: solo mostrar las que están habilitadas Y cuya hora aún no ha pasado hoy
+    const activeAlarms = appState.alarms.filter(alarm => {
+        // 1. Mostrar solo alarmas habilitadas
+        if (alarm.enabled === false) {
+            return false;
+        }
+        
+        // 2. Para alarmas de tipo "once" que ya se ejecutaron, no mostrar
+        if (alarm.repeat === 'once' && alarm.lastTriggered) {
+            return false;
+        }
+        
+        // 3. Si la hora de la alarma ya pasó hoy, no mostrar
+        if (hasAlarmTimePassedToday(alarm)) {
+            // Para alarmas repetitivas, la hora ya pasó hoy pero sonará mañana
+            // Para alarmas de una vez, si ya pasó la hora y no se ejecutó, tampoco mostrar
+            if (alarm.repeat === 'once') {
+                return false; // Alarma de una vez que ya pasó y no se ejecutó
+            }
+            // Para alarmas repetitivas (daily, weekdays, weekends), no mostrar si ya pasó hoy
+            // Se mostrarán de nuevo mañana cuando la hora aún no haya pasado
+            return false;
+        }
+        
+        return true;
+    });
+    
+    if (activeAlarms.length === 0) {
         container.innerHTML = '<p style="color: var(--text-secondary);">No hay alarmas configuradas</p>';
         return;
     }
     
-    appState.alarms.forEach(alarm => {
+    activeAlarms.forEach(alarm => {
         const item = document.createElement('div');
         item.className = 'alarm-item';
         
@@ -1004,14 +1285,20 @@ function renderAlarms() {
             </div>
         `;
         
-        item.querySelector('.delete-alarm').addEventListener('click', () => {
-            if (confirm('¿Eliminar esta alarma?')) {
-                deleteAlarm(alarm.id);
-            }
-        });
+        const deleteBtn = item.querySelector('.delete-alarm');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                if (confirm('¿Eliminar esta alarma?')) {
+                    deleteAlarm(alarm.id);
+                }
+            });
+        }
         
         container.appendChild(item);
     });
+    
+    const hiddenCount = appState.alarms.length - activeAlarms.length;
+    console.log(`📋 Mostrando ${activeAlarms.length} de ${appState.alarms.length} alarmas (${hiddenCount} ocultas: deshabilitadas o ya pasaron)`);
 }
 
 function getRepeatLabel(repeat) {
@@ -1120,20 +1407,11 @@ function isDNDActive() {
     return false;
 }
 
-// Variables globales para audio
-let audioCtx = null;
-
-function initAudioContext() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    return audioCtx;
-}
-
+// Función para desbloquear audio (usar la función initAudioContext unificada)
 function unlockAudio() {
-    if (!audioCtx) initAudioContext();
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume().then(() => {
+    const ctx = initAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+        ctx.resume().then(() => {
             console.log('AudioContext activado por usuario');
         }).catch(e => console.error('Error activando audio:', e));
     }
@@ -1142,20 +1420,25 @@ function unlockAudio() {
 function playAlarmSound(soundType, loop = false) {
     if (soundType === 'none') return;
     
-    // Asegurar que el contexto existe - usar el mismo que se inicializa al principio
-    if (!globalAudioContext) {
-        initAudioContext();
+    // NO crear nuevos osciladores si se está deteniendo la alarma
+    if (appState.isStoppingAlarm) {
+        console.log('⏸️ Deteniendo alarma - no se creará nuevo oscilador');
+        return;
     }
-    const ctx = globalAudioContext || audioCtx;
+    
+    // Asegurar que el contexto existe
+    const ctx = initAudioContext();
     
     if (!ctx) {
         console.error('No se pudo crear AudioContext');
         return;
     }
     
-    // Intentar reanudar si está suspendido
-    if (ctx.state === 'suspended') {
-        ctx.resume();
+    // Intentar reanudar si está suspendido (pero no si se está deteniendo)
+    if (ctx.state === 'suspended' && !appState.isStoppingAlarm) {
+        ctx.resume().catch(e => {
+            console.log('Error al reanudar AudioContext en playAlarmSound:', e.message);
+        });
     }
     
     const oscillator = ctx.createOscillator();
@@ -1165,12 +1448,15 @@ function playAlarmSound(soundType, loop = false) {
     gainNode.connect(ctx.destination);
     
     // Guardar referencia tanto del oscilador como del gainNode para poder detenerlos
-    const audioNode = { oscillator, gainNode };
+    const audioNode = { oscillator, gainNode, context: ctx, stopTime: null };
     appState.activeAlarmOscillators.push(audioNode);
     
-    // Limpiar osciladores detenidos del array
+    // NO eliminar automáticamente del array cuando termine - queremos poder detenerlo manualmente
+    // Solo limpiar si realmente terminó y no fue detenido manualmente
+    // NO eliminar automáticamente del array - mantenerlo para poder detenerlo manualmente
     oscillator.onended = () => {
-        appState.activeAlarmOscillators = appState.activeAlarmOscillators.filter(node => node !== audioNode);
+        audioNode.ended = true;
+        // NO eliminar del array - stopAlarm() se encargará de limpiarlo
     };
     
     const now = ctx.currentTime;
@@ -1184,7 +1470,10 @@ function playAlarmSound(soundType, loop = false) {
             gainNode.gain.setValueAtTime(0.5, now);
             gainNode.gain.exponentialRampToValueAtTime(0.01, now + 1.5);
             oscillator.start(now);
-            if (!loop) oscillator.stop(now + 1.5);
+            if (!loop) {
+                audioNode.autoStopTime = now + 1.5;
+                oscillator.stop(now + 1.5);
+            }
             break;
         case 'chime':
             oscillator.type = 'sine';
@@ -1192,7 +1481,10 @@ function playAlarmSound(soundType, loop = false) {
             gainNode.gain.setValueAtTime(0.5, now);
             gainNode.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
             oscillator.start(now);
-            if (!loop) oscillator.stop(now + 1.0);
+            if (!loop) {
+                audioNode.autoStopTime = now + 1.0;
+                oscillator.stop(now + 1.0);
+            }
             break;
         case 'beep':
             oscillator.type = 'square';
@@ -1200,7 +1492,10 @@ function playAlarmSound(soundType, loop = false) {
             gainNode.gain.setValueAtTime(0.3, now);
             gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
             oscillator.start(now);
-            if (!loop) oscillator.stop(now + 0.5);
+            if (!loop) {
+                audioNode.autoStopTime = now + 0.5;
+                oscillator.stop(now + 0.5);
+            }
             break;
         default:
             // Sonido predeterminado (tipo alarma digital)
@@ -1215,13 +1510,41 @@ function playAlarmSound(soundType, loop = false) {
             gainNode.gain.setValueAtTime(0, now + 0.5);
             
             oscillator.start(now);
-            if (!loop) oscillator.stop(now + 0.6);
+            if (!loop) {
+                audioNode.autoStopTime = now + 0.6;
+                oscillator.stop(now + 0.6);
+            }
     }
+    
+    // Guardar referencia del tiempo de inicio para poder cancelar programaciones
+    audioNode.startTime = now;
 }
 
 function startAlarmLoop(soundType) {
-    // Detener cualquier loop anterior
-    stopAlarm();
+    console.log('🔊 startAlarmLoop llamado con sonido:', soundType);
+    
+    // Detener cualquier loop anterior PRIMERO
+    if (appState.activeAlarmInterval) {
+        clearInterval(appState.activeAlarmInterval);
+        appState.activeAlarmInterval = null;
+        console.log('✅ Loop anterior detenido');
+    }
+    
+    // Limpiar osciladores anteriores
+    appState.activeAlarmOscillators.forEach(audioNode => {
+        try {
+            const osc = audioNode.oscillator;
+            const gain = audioNode.gainNode;
+            if (osc) {
+                try { osc.stop(); } catch (e) {}
+                try { osc.disconnect(); } catch (e) {}
+            }
+            if (gain) {
+                try { gain.disconnect(); } catch (e) {}
+            }
+        } catch (e) {}
+    });
+    appState.activeAlarmOscillators = [];
     
     // Reproducir inmediatamente
     playAlarmSound(soundType);
@@ -1229,124 +1552,236 @@ function startAlarmLoop(soundType) {
     // Configurar intervalo para repetir (cada 2 segundos es un buen ritmo para alarma)
     // Esto crea el efecto de "sonido constante" repitiendo el patrón
     appState.activeAlarmInterval = setInterval(() => {
-        playAlarmSound(soundType);
-        if (appState.vibrationEnabled) {
-            vibrateDevice([200, 100, 200, 100, 200]);
+        // Verificar que el intervalo aún esté activo Y que no se esté deteniendo
+        if (appState.activeAlarmInterval && !appState.isStoppingAlarm) {
+            playAlarmSound(soundType);
+            if (appState.vibrationEnabled) {
+                vibrateDevice([200, 100, 200, 100, 200]);
+            }
         }
     }, 2000);
+    
+    console.log('✅ Loop de alarma iniciado, intervalo ID:', appState.activeAlarmInterval);
 }
 
 async function stopAlarm() {
     console.log('🛑 stopAlarm() llamado');
+    console.log('🔍 Estado antes de detener:', {
+        activeAlarmInterval: appState.activeAlarmInterval,
+        oscillatorsCount: appState.activeAlarmOscillators.length,
+        currentActiveAlarm: appState.currentActiveAlarm?.name,
+        isStoppingAlarm: appState.isStoppingAlarm
+    });
     
-    // PRIMERO: Limpiar intervalo de repetición para evitar que se creen más osciladores
+    // PRIMERO: Activar bandera para prevenir creación de nuevos osciladores
+    appState.isStoppingAlarm = true;
+    
+    // SEGUNDO: Limpiar intervalo de repetición para evitar que se creen más osciladores
     if (appState.activeAlarmInterval) {
         clearInterval(appState.activeAlarmInterval);
         appState.activeAlarmInterval = null;
         console.log('✅ Intervalo de alarma detenido');
     }
     
-    // SEGUNDO: Detener todos los osciladores activos y desconectarlos
-    let stoppedCount = 0;
-    const now = (globalAudioContext || audioCtx)?.currentTime || 0;
+    // TERCERO: Obtener el contexto de audio actual (sin forzar reanudación)
+    const ctx = globalAudioContext || initAudioContext(false);
+    const now = ctx ? ctx.currentTime : 0;
     
-    appState.activeAlarmOscillators.forEach(audioNode => {
+    if (!ctx) {
+        console.warn('⚠️ No hay AudioContext disponible');
+        // Aún así, limpiar todo lo demás
+        appState.activeAlarmOscillators = [];
+        appState.currentActiveAlarm = null;
+        appState.isStoppingAlarm = false;
+        return;
+    }
+    
+    // TERCERO: Detener todos los osciladores activos de forma agresiva
+    let stoppedCount = 0;
+    const oscillatorsToStop = [...appState.activeAlarmOscillators]; // Copia para evitar problemas durante la iteración
+    
+    console.log(`🔍 Intentando detener ${oscillatorsToStop.length} osciladores activos`);
+    
+    oscillatorsToStop.forEach((audioNode, index) => {
         try {
-            // Puede ser un objeto con oscillator y gainNode, o solo el oscillator
             const osc = audioNode.oscillator || audioNode;
             const gain = audioNode.gainNode;
             
-            // Reducir el volumen a 0 inmediatamente (esto es más efectivo que detener)
-            if (gain) {
+            if (!osc) {
+                console.log(`⚠️ Oscilador ${index} no válido`);
+                return;
+            }
+            
+            // Marcar como detenido manualmente para evitar que onended lo elimine
+            audioNode.manuallyStopped = true;
+            
+            // PRIMERO: Reducir el volumen a 0 inmediatamente (más efectivo que detener)
+            if (gain && gain.gain) {
                 try {
+                    // Cancelar TODAS las programaciones futuras
                     gain.gain.cancelScheduledValues(now);
+                    // Establecer volumen a 0 INMEDIATAMENTE
                     gain.gain.setValueAtTime(0, now);
+                    // Asegurar que permanezca en 0
+                    gain.gain.linearRampToValueAtTime(0, now + 0.001);
+                    console.log(`✅ Volumen reducido a 0 para oscilador ${index}`);
                 } catch (e) {
-                    // Ignorar errores
+                    console.log(`Error al reducir volumen: ${e.message}`);
+                    // Intentar método alternativo
+                    try {
+                        gain.gain.value = 0;
+                    } catch (e2) {
+                        console.log(`Error al establecer volumen directamente: ${e2.message}`);
+                    }
                 }
             }
             
-            // Detener el oscilador
-            if (osc) {
-                try {
-                    if (osc.state === 'running' || osc.state === 'started') {
-                        osc.stop(now);
-                        stoppedCount++;
-                    }
-                } catch (e) {
-                    // Intentar detener de todas formas
+            // SEGUNDO: Detener el oscilador inmediatamente - intentar múltiples métodos
+            try {
+                // Cancelar cualquier programación futura de detención automática
+                if (audioNode.autoStopTime && audioNode.autoStopTime > now) {
                     try {
-                        osc.stop();
-                        stoppedCount++;
-                    } catch (e2) {
-                        console.log('Oscilador ya detenido');
-                    }
+                        // Intentar cancelar la programación de stop
+                        // Nota: No hay forma directa de cancelar oscillator.stop(), pero podemos desconectar
+                        console.log(`⚠️ Oscilador ${index} tiene stop programado en ${audioNode.autoStopTime}, desconectando...`);
+                    } catch (e) {}
                 }
                 
-                // Desconectar del contexto de audio
-                if (osc.disconnect) {
+                // Intentar detener con tiempo actual primero
+                if (typeof osc.stop === 'function') {
                     try {
+                        // Verificar el estado antes de detener
+                        const oscState = osc.state;
+                        if (oscState === 'running' || oscState === 'started') {
+                            osc.stop(now);
+                            stoppedCount++;
+                            console.log(`✅ Oscilador ${index} detenido con tiempo (estado: ${oscState})`);
+                        } else {
+                            // Ya está detenido o en otro estado
+                            console.log(`ℹ️ Oscilador ${index} ya estaba en estado: ${oscState}`);
+                            stoppedCount++;
+                        }
+                    } catch (stopError) {
+                        // Si falla, intentar sin tiempo
+                        try {
+                            osc.stop();
+                            stoppedCount++;
+                            console.log(`✅ Oscilador ${index} detenido sin tiempo`);
+                        } catch (stopError2) {
+                            // Si aún falla, verificar el estado
+                            const oscState = osc.state;
+                            console.log(`⚠️ Oscilador ${index} estado: ${oscState}, error: ${stopError2.message}`);
+                            // Intentar una última vez con diferentes métodos
+                            if (oscState !== 'finished' && oscState !== 'closed') {
+                                try {
+                                    // Forzar detención desconectando primero
+                                    if (osc.disconnect) osc.disconnect();
+                                    stoppedCount++;
+                                    console.log(`✅ Oscilador ${index} desconectado forzadamente`);
+                                } catch (finalError) {
+                                    console.log(`❌ No se pudo detener oscilador ${index} completamente: ${finalError.message}`);
+                                }
+                            } else {
+                                stoppedCount++; // Ya estaba detenido
+                            }
+                        }
+                    }
+                } else {
+                    console.log(`⚠️ Oscilador ${index} no tiene método stop()`);
+                    // Intentar desconectar de todas formas
+                    if (osc.disconnect) {
                         osc.disconnect();
-                    } catch (e) {
-                        // Ignorar errores de desconexión
+                        stoppedCount++;
                     }
                 }
+            } catch (e) {
+                console.log(`❌ Error al intentar detener oscilador ${index}: ${e.message}`);
             }
             
-            // Desconectar gainNode si existe
-            if (gain && gain.disconnect) {
-                try {
-                    gain.disconnect();
-                } catch (e) {
-                    // Ignorar errores
+            // TERCERO: Desconectar todos los nodos
+            try {
+                if (osc.disconnect) {
+                    osc.disconnect();
                 }
+                if (gain && gain.disconnect) {
+                    gain.disconnect();
+                }
+                console.log(`✅ Nodos desconectados para oscilador ${index}`);
+            } catch (e) {
+                console.log(`Error al desconectar: ${e.message}`);
             }
         } catch (e) {
-            console.log('Error al detener nodo de audio:', e.message);
+            console.error(`❌ Error crítico al detener nodo ${index}:`, e);
         }
     });
-    console.log(`✅ ${stoppedCount} osciladores detenidos`);
     
-    // Limpiar el array de osciladores
+    console.log(`✅ ${stoppedCount} de ${oscillatorsToStop.length} osciladores detenidos`);
+    
+    // Limpiar el array de osciladores completamente
     appState.activeAlarmOscillators = [];
     
-    // TERCERO: Detener vibración si está activa
+    // CUARTO: Detener vibración si está activa
     if ('vibrate' in navigator) {
-        navigator.vibrate(0); // 0 detiene cualquier vibración en curso
+        navigator.vibrate(0);
         console.log('✅ Vibración detenida');
     }
     
-    // CUARTO: Detener cualquier sonido que pueda estar reproduciéndose
-    // Intentar detener todos los nodos de audio activos
-    if (globalAudioContext && globalAudioContext.state !== 'closed') {
+    // QUINTO: Suspender el AudioContext para detener TODO el audio inmediatamente
+    // Este es el método más efectivo - detiene todo el audio del contexto
+    if (ctx) {
         try {
-            // Suspender el contexto de audio temporalmente para detener todo
-            if (globalAudioContext.state === 'running') {
-                globalAudioContext.suspend().then(() => {
-                    console.log('✅ AudioContext suspendido');
-                    // Reanudar después de un momento para permitir futuras reproducciones
-                    setTimeout(() => {
-                        if (globalAudioContext.state === 'suspended') {
-                            globalAudioContext.resume();
+            // Suspender INMEDIATAMENTE sin importar el estado
+            // Esto detiene TODOS los nodos de audio activos
+            if (ctx.state === 'running') {
+                try {
+                    await ctx.suspend();
+                    console.log('✅ AudioContext suspendido - TODO el audio detenido inmediatamente');
+                } catch (suspendError) {
+                    console.log('⚠️ Error al suspender AudioContext:', suspendError.message);
+                    // Intentar método alternativo: desconectar todos los nodos
+                    try {
+                        if (ctx.destination) {
+                            // Desconectar todos los nodos conectados al destino
+                            ctx.destination.disconnect();
                         }
-                    }, 100);
-                });
+                    } catch (disconnectError) {
+                        console.log('⚠️ Error al desconectar destino:', disconnectError.message);
+                    }
+                }
+            } else if (ctx.state === 'suspended') {
+                console.log('✅ AudioContext ya estaba suspendido');
+            } else {
+                console.log('AudioContext estado:', ctx.state);
             }
+            
+            // NO reanudar automáticamente - dejar que se reanude cuando sea necesario
+            // El usuario puede interactuar para reanudarlo si es necesario
         } catch (e) {
-            console.log('No se pudo suspender AudioContext:', e.message);
+            console.error('❌ Error crítico al suspender AudioContext:', e);
         }
+    } else {
+        console.warn('⚠️ No hay AudioContext para suspender');
     }
     
-    // QUINTO: Eliminar la alarma automáticamente si existe
+    // QUINTO: Eliminar la alarma SOLO si es de tipo "once" (una vez)
+    // Las alarmas repetitivas deben permanecer activas para futuras ejecuciones
     if (appState.currentActiveAlarm) {
-        const alarmId = appState.currentActiveAlarm.id;
-        console.log('🗑️ Eliminando alarma automáticamente:', appState.currentActiveAlarm.name);
+        const alarm = appState.currentActiveAlarm;
+        const alarmId = alarm.id;
         
-        try {
-            await deleteAlarm(alarmId);
-            console.log('✅ Alarma eliminada correctamente');
-        } catch (error) {
-            console.error('❌ Error al eliminar la alarma:', error);
+        // Solo eliminar si es una alarma de una sola vez
+        if (alarm.repeat === 'once') {
+            console.log('🗑️ Eliminando alarma de una vez:', alarm.name);
+            try {
+                await deleteAlarm(alarmId);
+                console.log('✅ Alarma eliminada correctamente');
+            } catch (error) {
+                console.error('❌ Error al eliminar la alarma:', error);
+            }
+        } else {
+            console.log('ℹ️ Alarma repetitiva mantenida:', alarm.name, '- tipo:', alarm.repeat);
+            // Para alarmas repetitivas, solo deshabilitar temporalmente o mantener activa
+            // La alarma seguirá sonando en su próxima hora programada
         }
         
         // Limpiar referencia
@@ -1358,6 +1793,22 @@ async function stopAlarm() {
     if (stopAlarmBtn) {
         stopAlarmBtn.classList.remove('active');
     }
+    
+    // SÉPTIMO: Desactivar bandera después de un delay más largo para asegurar que todo está limpio
+    // Esto previene que se reanude el AudioContext accidentalmente
+    setTimeout(() => {
+        appState.isStoppingAlarm = false;
+        console.log('✅ Bandera de detención desactivada - alarma completamente detenida');
+        
+        // Reanudar AudioContext solo si está suspendido y no hay alarma activa
+        if (ctx && ctx.state === 'suspended' && !appState.currentActiveAlarm) {
+            ctx.resume().then(() => {
+                console.log('✅ AudioContext reanudado para futuras reproducciones');
+            }).catch(e => {
+                console.log('Error al reanudar AudioContext:', e.message);
+            });
+        }
+    }, 1000); // Aumentar a 1 segundo para asegurar que todo está limpio
     
     console.log('✅ Alarma completamente detenida');
 }
@@ -1387,7 +1838,62 @@ async function triggerAlarm(alarm) {
     const stopAlarmBtn = document.getElementById('stopAlarmBtn');
     if (stopAlarmBtn) {
         stopAlarmBtn.classList.add('active');
+        // Asegurar que el botón sea visible y clickeable
+        stopAlarmBtn.style.display = 'flex';
+        stopAlarmBtn.style.opacity = '1';
+        stopAlarmBtn.style.visibility = 'visible';
+        stopAlarmBtn.style.pointerEvents = 'auto';
+        stopAlarmBtn.style.zIndex = '99999'; // Aumentar z-index al máximo para asegurar que esté por encima
+        stopAlarmBtn.style.position = 'fixed'; // Asegurar posición fija
+        stopAlarmBtn.style.bottom = '30px';
+        stopAlarmBtn.style.right = '30px';
+        stopAlarmBtn.style.cursor = 'pointer';
+        stopAlarmBtn.style.userSelect = 'none'; // Prevenir selección de texto
+        
+        // Remover cualquier clase que pueda ocultar el botón
+        stopAlarmBtn.classList.remove('hidden');
+        
+        // Forzar reflow para asegurar que los estilos se apliquen
+        stopAlarmBtn.offsetHeight;
+        
+        // Verificar que el botón tiene los event listeners
+        const hasOnclick = stopAlarmBtn.onclick !== null;
+        const rect = stopAlarmBtn.getBoundingClientRect();
+        
         console.log('✅ Animación de pulso activada en botón "Apagar Alarma"');
+        console.log('🔍 Botón configurado:', {
+            display: stopAlarmBtn.style.display,
+            opacity: stopAlarmBtn.style.opacity,
+            zIndex: stopAlarmBtn.style.zIndex,
+            pointerEvents: stopAlarmBtn.style.pointerEvents,
+            visible: stopAlarmBtn.offsetParent !== null,
+            hasOnclick: hasOnclick,
+            position: {
+                top: rect.top,
+                left: rect.left,
+                bottom: rect.bottom,
+                right: rect.right,
+                width: rect.width,
+                height: rect.height
+            },
+            isVisible: rect.width > 0 && rect.height > 0
+        });
+        
+        // Agregar un test visual: cambiar temporalmente el color para confirmar visibilidad
+        const originalBg = stopAlarmBtn.style.background;
+        stopAlarmBtn.style.background = 'linear-gradient(135deg, #ff0000 0%, #cc0000 100%)';
+        setTimeout(() => {
+            stopAlarmBtn.style.background = originalBg || 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+        }, 500);
+        
+        // Forzar focus en el botón para asegurar que sea accesible
+        try {
+            stopAlarmBtn.focus();
+        } catch (e) {
+            console.log('No se pudo hacer focus en el botón:', e.message);
+        }
+    } else {
+        console.error('❌ No se encontró el botón stopAlarmBtn al activar alarma');
     }
     
     // Reproducir sonido CONSTANTE (loop) - SIEMPRE si está configurado
@@ -1459,16 +1965,20 @@ async function triggerAlarm(alarm) {
         console.log('Notificaciones deshabilitadas - solo modal y sonido');
     }
     
-    // Si es una alarma de una sola vez, deshabilitarla
+    // Si es una alarma de una sola vez, deshabilitarla (pero NO eliminarla todavía)
+    // Se eliminará cuando el usuario presione el botón "Apagar Alarma"
     if (alarm.repeat === 'once') {
         alarm.enabled = false;
+        console.log('ℹ️ Alarma de una vez deshabilitada (se eliminará al detener)');
     }
 
     // Guardar cambios (lastTriggered y posible cambio de enabled)
     if (db) {
         const transaction = db.transaction([CONFIG.ALARMS_STORE], 'readwrite');
         const store = transaction.objectStore(CONFIG.ALARMS_STORE);
-        store.put(alarm);
+        store.put(alarm).onsuccess = () => {
+            console.log('✅ Alarma actualizada en la base de datos');
+        };
     }
     renderAlarms();
 }
