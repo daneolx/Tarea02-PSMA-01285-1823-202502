@@ -1,12 +1,15 @@
 {
+  "id": "/Tarea02-PSMA-01285-1823-202502/",
   "name": "Reloj Digital Inteligente",
   "short_name": "Reloj Digital",
   "description": "Reloj digital con múltiples zonas horarias, alarmas y sincronización automática",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
   "orientation": "any",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "icon-192.png",

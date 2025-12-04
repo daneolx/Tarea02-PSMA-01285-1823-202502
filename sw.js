@@ -1,11 +1,13 @@
 // Service Worker para Reloj Digital Inteligente PWA
-const CACHE_NAME = 'reloj-digital-v1';
+const CACHE_NAME = 'reloj-digital-v1.0.1';
 const urlsToCache = [
   './',
   './index.html',
   './styles.css',
   './app.js',
-  './manifest.json'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 // Instalación del Service Worker
