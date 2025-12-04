@@ -995,6 +995,61 @@ html[data-theme="dark"] .btn-primary:hover {
     max-width: 600px;
 }
 
+/* Modal de Alarma Activa */
+.active-alarm-modal {
+    z-index: 10000 !important;
+    background: rgba(0, 0, 0, 0.8) !important;
+    animation: alarmPulse 1s ease-in-out infinite;
+}
+
+@keyframes alarmPulse {
+    0%, 100% {
+        background: rgba(0, 0, 0, 0.8);
+    }
+    50% {
+        background: rgba(231, 76, 60, 0.3);
+    }
+}
+
+.alarm-ringing-content {
+    background: var(--bg-primary) !important;
+    border: 3px solid var(--danger) !important;
+    box-shadow: 0 0 30px rgba(231, 76, 60, 0.5) !important;
+    animation: shake 0.5s ease-in-out infinite;
+}
+
+@keyframes shake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-5px);
+    }
+    75% {
+        transform: translateX(5px);
+    }
+}
+
+.active-alarm-modal .btn-danger {
+    background: var(--danger) !important;
+    color: white !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+}
+
+.active-alarm-modal .btn-danger:hover {
+    background: #c0392b !important;
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
+}
+
+.active-alarm-modal .btn-danger:active {
+    transform: scale(0.98);
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;

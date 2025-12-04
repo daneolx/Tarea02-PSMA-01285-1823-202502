@@ -94,13 +94,7 @@ document.addEventListener('click', initAudioContext, { once: false });
 document.addEventListener('touchstart', initAudioContext, { once: false });
 document.addEventListener('keydown', initAudioContext, { once: false });
 
-// Event listener para detener alarma desde el modal
-document.addEventListener('DOMContentLoaded', () => {
-    const stopBtn = document.getElementById('stopAlarmBtn');
-    if (stopBtn) {
-        stopBtn.addEventListener('click', stopAlarm);
-    }
-});
+// El event listener para detener alarma se configura en setupEventListeners()
 
 // ============================================
 // INICIALIZACIÓN
@@ -790,6 +784,22 @@ function setupEventListeners() {
     ['click', 'touchstart', 'keydown'].forEach(event => {
         document.body.addEventListener(event, unlockAudio, { once: true });
     });
+    
+    // Botón para detener alarma
+    const stopAlarmBtn = document.getElementById('stopAlarmBtn');
+    if (stopAlarmBtn) {
+        stopAlarmBtn.addEventListener('click', stopAlarm);
+    }
+    
+    // Cerrar modal de alarma al hacer clic fuera (también detiene la alarma)
+    const activeAlarmModal = document.getElementById('activeAlarmModal');
+    if (activeAlarmModal) {
+        activeAlarmModal.addEventListener('click', (e) => {
+            if (e.target.id === 'activeAlarmModal') {
+                stopAlarm();
+            }
+        });
+    }
 }
 
 function toggleTheme() {
@@ -1235,6 +1245,11 @@ function stopAlarm() {
         }
     });
     appState.activeAlarmOscillators = [];
+    
+    // Detener vibración si está activa
+    if ('vibrate' in navigator) {
+        navigator.vibrate(0); // 0 detiene cualquier vibración en curso
+    }
     
     // Ocultar modal
     const modal = document.getElementById('activeAlarmModal');
