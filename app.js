@@ -377,9 +377,21 @@ function startClock() {
     if (syncInterval) clearInterval(syncInterval);
     
     // Actualizar reloj cada segundo (funciona incluso en segundo plano)
-    clockInterval = setInterval(() => {
+    // Usar función nombrada para mejor debugging
+    function updateClock() {
         updateAllClocks();
-    }, CONFIG.UPDATE_INTERVAL);
+    }
+    
+    // Iniciar intervalo para actualizar el reloj cada segundo
+    clockInterval = setInterval(updateClock, CONFIG.UPDATE_INTERVAL);
+    
+    // Verificar que el intervalo se inició correctamente
+    if (!clockInterval) {
+        console.error('Error: No se pudo iniciar el intervalo del reloj');
+        // Reintentar después de un momento
+        setTimeout(() => startClock(), 1000);
+        return;
+    }
     
     // Actualizar alarmas cada segundo
     alarmInterval = setInterval(() => {
@@ -399,6 +411,13 @@ function startClock() {
             checkAlarms();
         }
     });
+    
+    // También actualizar cuando la ventana recibe foco
+    window.addEventListener('focus', () => {
+        updateAllClocks();
+    });
+    
+    console.log('Reloj iniciado - Actualizando cada', CONFIG.UPDATE_INTERVAL, 'ms');
 }
 
 function updateAllClocks() {
@@ -426,13 +445,40 @@ function updateAllClocks() {
     // Actualizar relojes digitales modernos
     document.querySelectorAll('.time-display-modern').forEach(display => {
         const timezone = display.dataset.timezone;
-        const timeString = formatTimeForTimezone(now, timezone);
         
-        // Separar tiempo y AM/PM
-        const parts = timeString.split(' ');
-        const timeOnly = parts[0];
-        const amPm = parts[1] || '';
-        const [hours, minutes, seconds] = timeOnly.split(':');
+        // Obtener hora en la zona horaria específica usando Intl.DateTimeFormat
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+        
+        const parts = formatter.formatToParts(now);
+        let hours = 0, minutes = 0, seconds = 0;
+        
+        parts.forEach(part => {
+            if (part.type === 'hour') hours = parseInt(part.value, 10);
+            if (part.type === 'minute') minutes = parseInt(part.value, 10);
+            if (part.type === 'second') seconds = parseInt(part.value, 10);
+        });
+        
+        // Formatear según el formato de hora configurado
+        let use12Hour = false;
+        if (appState.hourFormat === '12') {
+            use12Hour = true;
+        } else if (appState.hourFormat === 'auto') {
+            use12Hour = detectSystemHourFormatValue() === '12';
+        }
+        
+        let displayHours = hours;
+        let amPm = '';
+        
+        if (use12Hour) {
+            displayHours = hours % 12 || 12;
+            amPm = hours >= 12 ? 'PM' : 'AM';
+        }
         
         const hoursEl = display.querySelector('.time-hours');
         const minutesEl = display.querySelector('.time-minutes');
@@ -440,11 +486,19 @@ function updateAllClocks() {
         const amPmEl = display.querySelector('.time-ampm');
         const separatorEls = display.querySelectorAll('.time-separator');
         
-        if (hoursEl) hoursEl.textContent = hours.padStart(2, '0');
-        if (minutesEl) minutesEl.textContent = minutes.padStart(2, '0');
+        // Actualizar solo si los valores han cambiado (optimización)
+        if (hoursEl && hoursEl.textContent !== String(displayHours).padStart(2, '0')) {
+            hoursEl.textContent = String(displayHours).padStart(2, '0');
+        }
+        if (minutesEl && minutesEl.textContent !== String(minutes).padStart(2, '0')) {
+            minutesEl.textContent = String(minutes).padStart(2, '0');
+        }
         
         if (secondsEl && appState.showSeconds) {
-            secondsEl.textContent = (seconds || '00').padStart(2, '0');
+            const secondsText = String(seconds).padStart(2, '0');
+            if (secondsEl.textContent !== secondsText) {
+                secondsEl.textContent = secondsText;
+            }
             secondsEl.style.display = 'inline-block';
             if (separatorEls[1]) separatorEls[1].style.display = 'inline-block';
         } else if (secondsEl) {
@@ -453,8 +507,10 @@ function updateAllClocks() {
         }
         
         if (amPmEl) {
-            if (amPm) {
-                amPmEl.textContent = amPm;
+            if (use12Hour && amPm) {
+                if (amPmEl.textContent !== amPm) {
+                    amPmEl.textContent = amPm;
+                }
                 amPmEl.style.display = 'inline-block';
             } else {
                 amPmEl.style.display = 'none';
