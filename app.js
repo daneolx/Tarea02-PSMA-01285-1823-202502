@@ -447,6 +447,7 @@ function updateAllClocks() {
         const timezone = display.dataset.timezone;
         
         // Obtener hora en la zona horaria específica usando Intl.DateTimeFormat
+        // Asegurar que SIEMPRE incluya segundos
         const formatter = new Intl.DateTimeFormat('en-US', {
             timeZone: timezone,
             hour: '2-digit',
@@ -454,6 +455,11 @@ function updateAllClocks() {
             second: '2-digit',
             hour12: false
         });
+        
+        // Verificar que el formatter está configurado correctamente
+        if (!formatter) {
+            console.error('Error: No se pudo crear el formatter para', timezone);
+        }
         
         const parts = formatter.formatToParts(now);
         let hours = 0, minutes = 0, seconds = 0;
@@ -463,6 +469,26 @@ function updateAllClocks() {
             if (part.type === 'minute') minutes = parseInt(part.value, 10);
             if (part.type === 'second') seconds = parseInt(part.value, 10);
         });
+        
+        // Verificar que los segundos se obtuvieron correctamente
+        // Si no, calcularlos usando un método alternativo
+        if (isNaN(seconds) || seconds === undefined) {
+            // Método alternativo: usar toLocaleString y parsear
+            const timeStr = now.toLocaleString('en-US', {
+                timeZone: timezone,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            const timeParts = timeStr.split(':');
+            if (timeParts.length >= 3) {
+                seconds = parseInt(timeParts[2], 10);
+            } else {
+                // Último recurso: usar los segundos de la fecha local
+                seconds = now.getSeconds();
+            }
+        }
         
         // Formatear según el formato de hora configurado
         let use12Hour = false;
@@ -486,24 +512,43 @@ function updateAllClocks() {
         const amPmEl = display.querySelector('.time-ampm');
         const separatorEls = display.querySelectorAll('.time-separator');
         
-        // Actualizar solo si los valores han cambiado (optimización)
-        if (hoursEl && hoursEl.textContent !== String(displayHours).padStart(2, '0')) {
-            hoursEl.textContent = String(displayHours).padStart(2, '0');
+        // Actualizar horas y minutos solo si han cambiado (optimización)
+        if (hoursEl) {
+            const hoursText = String(displayHours).padStart(2, '0');
+            if (hoursEl.textContent !== hoursText) {
+                hoursEl.textContent = hoursText;
+            }
         }
-        if (minutesEl && minutesEl.textContent !== String(minutes).padStart(2, '0')) {
-            minutesEl.textContent = String(minutes).padStart(2, '0');
+        if (minutesEl) {
+            const minutesText = String(minutes).padStart(2, '0');
+            if (minutesEl.textContent !== minutesText) {
+                minutesEl.textContent = minutesText;
+            }
         }
         
+        // SIEMPRE actualizar segundos (sin condición de optimización)
         if (secondsEl && appState.showSeconds) {
             const secondsText = String(seconds).padStart(2, '0');
+            // Forzar actualización siempre - usar innerText en lugar de textContent para forzar repintado
             if (secondsEl.textContent !== secondsText) {
                 secondsEl.textContent = secondsText;
+            } else {
+                // Si el valor es el mismo, forzar actualización de todas formas
+                secondsEl.textContent = secondsText;
+                // Forzar repintado del navegador usando múltiples métodos
+                secondsEl.style.visibility = 'hidden';
+                secondsEl.offsetHeight; // Trigger reflow
+                secondsEl.style.visibility = 'visible';
             }
             secondsEl.style.display = 'inline-block';
-            if (separatorEls[1]) separatorEls[1].style.display = 'inline-block';
+            if (separatorEls[1]) {
+                separatorEls[1].style.display = 'inline-block';
+            }
         } else if (secondsEl) {
             secondsEl.style.display = 'none';
-            if (separatorEls[1]) separatorEls[1].style.display = 'none';
+            if (separatorEls[1]) {
+                separatorEls[1].style.display = 'none';
+            }
         }
         
         if (amPmEl) {
