@@ -996,38 +996,39 @@ html[data-theme="dark"] .btn-primary:hover {
 }
 
 /* Modal de Alarma Activa */
-.active-alarm-modal {
-    z-index: 10000 !important;
-    background: rgba(0, 0, 0, 0.8) !important;
-    animation: alarmPulse 1s ease-in-out infinite;
+/* Modal de alarma - solo visible cuando NO tiene la clase hidden */
+.active-alarm-modal:not(.hidden) {
+    z-index: 99999 !important;
+    background: rgba(0, 0, 0, 0.85) !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    /* Sin animaciones que causen parpadeo */
+    animation: none !important;
 }
 
-@keyframes alarmPulse {
-    0%, 100% {
-        background: rgba(0, 0, 0, 0.8);
-    }
-    50% {
-        background: rgba(231, 76, 60, 0.3);
-    }
+/* Asegurar que el modal esté oculto cuando tiene la clase hidden */
+.active-alarm-modal.hidden {
+    display: none !important;
 }
 
 .alarm-ringing-content {
     background: var(--bg-primary) !important;
     border: 3px solid var(--danger) !important;
     box-shadow: 0 0 30px rgba(231, 76, 60, 0.5) !important;
-    animation: shake 0.5s ease-in-out infinite;
-}
-
-@keyframes shake {
-    0%, 100% {
-        transform: translateX(0);
-    }
-    25% {
-        transform: translateX(-5px);
-    }
-    75% {
-        transform: translateX(5px);
-    }
+    /* Sin animaciones que causen parpadeo */
+    animation: none !important;
+    transform: none !important;
+    /* Asegurar que esté centrado */
+    margin: auto !important;
+    position: relative !important;
 }
 
 .active-alarm-modal .btn-danger {

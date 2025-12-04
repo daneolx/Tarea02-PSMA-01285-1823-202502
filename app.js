@@ -29,7 +29,8 @@ let appState = {
     currentView: 'cards', // cards, map, compare
     loadedTimezones: new Set(), // Para lazy loading
     activeAlarmInterval: null, // Intervalo de la alarma sonando
-    activeAlarmOscillators: [] // Osciladores activos para detenerlos
+    activeAlarmOscillators: [], // Osciladores activos para detenerlos
+    currentActiveAlarm: null // Alarma que está sonando actualmente
 };
 
 // Inicialización
@@ -1236,7 +1237,9 @@ function startAlarmLoop(soundType) {
     }, 2000);
 }
 
-function stopAlarm() {
+async function stopAlarm() {
+    console.log('🛑 stopAlarm() llamado');
+    
     // Limpiar intervalo de repetición
     if (appState.activeAlarmInterval) {
         clearInterval(appState.activeAlarmInterval);
@@ -1258,14 +1261,31 @@ function stopAlarm() {
         navigator.vibrate(0); // 0 detiene cualquier vibración en curso
     }
     
-    // Ocultar modal - ESTO ES LO QUE FALTABA
+    // Eliminar la alarma automáticamente si existe
+    if (appState.currentActiveAlarm) {
+        const alarmId = appState.currentActiveAlarm.id;
+        console.log('🗑️ Eliminando alarma automáticamente:', appState.currentActiveAlarm.name);
+        
+        try {
+            await deleteAlarm(alarmId);
+            console.log('✅ Alarma eliminada correctamente');
+        } catch (error) {
+            console.error('❌ Error al eliminar la alarma:', error);
+        }
+        
+        // Limpiar referencia
+        appState.currentActiveAlarm = null;
+    }
+    
+    // Ocultar modal - asegurar que esté completamente oculto
     const modal = document.getElementById('activeAlarmModal');
     if (modal) {
         modal.classList.add('hidden');
-        modal.style.display = 'none';
+        // Limpiar cualquier estilo inline que pueda interferir
+        modal.removeAttribute('style');
     }
     
-    console.log('✅ Alarma detenida y modal cerrado');
+    console.log('✅ Alarma detenida, eliminada y modal cerrado');
 }
 
 function vibrateDevice(pattern = [200, 100, 200]) {
@@ -1282,6 +1302,9 @@ async function triggerAlarm(alarm) {
         console.log('Modo No Molestar activo - alarma silenciada');
         return;
     }
+
+    // Guardar referencia de la alarma activa
+    appState.currentActiveAlarm = alarm;
 
     // Marcar como disparada AHORA
     alarm.lastTriggered = new Date().toISOString();
@@ -1316,33 +1339,12 @@ async function triggerAlarm(alarm) {
         console.error('❌ No se encontró activeAlarmTime');
     }
     
-    // Asegurar que el modal esté visible - FORZAR CON !important
-    activeModal.classList.remove('hidden');
-    // Usar setAttribute para forzar el estilo inline con !important
-    activeModal.setAttribute('style', 'display: flex !important; visibility: visible !important; opacity: 1 !important; z-index: 10000 !important; pointer-events: auto !important;');
-    
-    console.log('✅ Cambios aplicados al modal');
-    console.log('Estado final - Classes:', activeModal.className);
-    console.log('Estado final - Style attribute:', activeModal.getAttribute('style'));
-    
-    // Verificar si realmente está visible después de un pequeño delay
-    setTimeout(() => {
-        const computedStyle = window.getComputedStyle(activeModal);
-        console.log('Estado después de timeout:');
-        console.log('- Display:', computedStyle.display);
-        console.log('- Visibility:', computedStyle.visibility);
-        console.log('- Opacity:', computedStyle.opacity);
-        console.log('- Z-index:', computedStyle.zIndex);
+        // Asegurar que el modal esté visible - solo remover hidden, el CSS se encarga del resto
+        activeModal.classList.remove('hidden');
+        // No usar estilos inline para evitar conflictos con el CSS
+        // El CSS ya tiene todos los estilos necesarios con !important
         
-        if (computedStyle.display === 'none') {
-            console.error('❌ ERROR CRÍTICO: El modal sigue con display:none');
-            // Intentar de nuevo con método más agresivo
-            activeModal.removeAttribute('class');
-            activeModal.setAttribute('style', 'display: flex !important; visibility: visible !important; opacity: 1 !important; z-index: 10000 !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important;');
-        } else {
-            console.log('✅ Modal visible correctamente');
-        }
-    }, 100);
+        console.log('✅ Modal mostrado - clase hidden removida');
     
     // Reproducir sonido CONSTANTE (loop) - SIEMPRE si está configurado
     if (appState.alarmSound !== 'none') {
