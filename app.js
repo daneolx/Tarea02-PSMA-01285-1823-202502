@@ -190,7 +190,7 @@ function createTimezoneCard(timezone) {
     
     const now = new Date();
     const time = formatTimeForTimezone(now, timezone.timezone);
-    const date = formatDateForTimezone(now, timezone.timezone);
+    const date = formatDateShortForTimezone(now, timezone.timezone);
     const offset = getTimezoneOffset(timezone.timezone);
     
     card.innerHTML = `
@@ -202,19 +202,26 @@ function createTimezoneCard(timezone) {
             </div>
         </div>
         <div class="clock-container">
-            <div class="analog-clock" data-timezone="${timezone.timezone}">
-                <div class="clock-face">
-                    <div class="hour-hand" data-timezone="${timezone.timezone}"></div>
-                    <div class="minute-hand" data-timezone="${timezone.timezone}"></div>
-                    <div class="second-hand" data-timezone="${timezone.timezone}"></div>
-                    <div class="clock-center"></div>
-                    ${generateClockNumbers()}
+            <div class="digital-clock-modern">
+                <div class="digital-clock-inner">
+                    <div class="time-display-modern" data-timezone="${timezone.timezone}">
+                        ${(() => {
+                            const timeParts = time.split(' ');
+                            const timeOnly = timeParts[0];
+                            const amPm = timeParts[1] || '';
+                            const [hours, minutes, seconds] = timeOnly.split(':');
+                            return `
+                                <span class="time-hours">${hours}</span>
+                                <span class="time-separator">:</span>
+                                <span class="time-minutes">${minutes}</span>
+                                ${appState.showSeconds ? `<span class="time-separator">:</span><span class="time-seconds">${seconds || '00'}</span>` : ''}
+                                ${amPm ? `<span class="time-ampm">${amPm}</span>` : ''}
+                            `;
+                        })()}
+                    </div>
+                    <div class="date-display-modern">${date}</div>
+                    <div class="timezone-offset-modern">${offset}</div>
                 </div>
-            </div>
-            <div class="digital-clock">
-                <div class="time-display" data-timezone="${timezone.timezone}">${time}</div>
-                <div class="date-display">${date}</div>
-                <div class="timezone-offset">${offset}</div>
             </div>
         </div>
     `;
@@ -222,12 +229,6 @@ function createTimezoneCard(timezone) {
     // Event listeners para editar/eliminar
     card.querySelector('.edit-timezone').addEventListener('click', () => editTimezone(timezone.id));
     card.querySelector('.delete-timezone').addEventListener('click', () => deleteTimezone(timezone.id));
-    
-    // Inicializar reloj analógico
-    const analogClock = card.querySelector('.analog-clock');
-    if (analogClock) {
-        updateAnalogClock(analogClock, now, timezone.timezone);
-    }
     
     return card;
 }
@@ -286,6 +287,41 @@ function formatDateForTimezone(date, timezone) {
     return new Intl.DateTimeFormat(navigator.language, options).format(date);
 }
 
+function formatDateShortForTimezone(date, timezone) {
+    // Formato: Lun dd/mm/yyyy
+    const weekdayOptions = {
+        timeZone: timezone,
+        weekday: 'short'
+    };
+    
+    const dateOptions = {
+        timeZone: timezone,
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    };
+    
+    // Obtener día de la semana abreviado
+    const weekdayFormatter = new Intl.DateTimeFormat('es-ES', weekdayOptions);
+    const weekday = weekdayFormatter.format(date);
+    
+    // Obtener fecha en formato dd/mm/yyyy
+    const dateFormatter = new Intl.DateTimeFormat('es-ES', dateOptions);
+    const parts = dateFormatter.formatToParts(date);
+    
+    let day = '';
+    let month = '';
+    let year = '';
+    
+    parts.forEach(part => {
+        if (part.type === 'day') day = part.value;
+        if (part.type === 'month') month = part.value;
+        if (part.type === 'year') year = part.value;
+    });
+    
+    return `${weekday} ${day}/${month}/${year}`;
+}
+
 function getTimezoneOffset(timezone) {
     const now = new Date();
     const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
@@ -301,37 +337,6 @@ function getCityNameFromTimezone(timezone) {
     return parts[parts.length - 1].replace(/_/g, ' ');
 }
 
-function generateClockNumbers() {
-    let numbers = '';
-    let marks = '';
-    
-    // Generar números del 1 al 12 (ajustado para reloj de 160px)
-    // Movidos hacia el borde (de 32 a 37.4, aproximadamente 10% más que 34)
-    for (let i = 1; i <= 12; i++) {
-        const angle = (i * 30) - 90; // 30 grados por hora, -90 para empezar en 12
-        const x = 50 + 37.4 * Math.cos(angle * Math.PI / 180);
-        const y = 50 + 37.4 * Math.sin(angle * Math.PI / 180);
-        numbers += `<div class="clock-number" style="left: ${x}%; top: ${y}%; transform: translate(-50%, -50%);">${i}</div>`;
-    }
-    
-    // Generar marcas de minutos (60 marcas, ajustado para reloj de 160px)
-    // Las marcas deben llegar hasta el borde (50 es el radio máximo en viewBox 0-100)
-    for (let i = 0; i < 60; i++) {
-        const angle = (i * 6) - 90; // 6 grados por minuto
-        const isHourMark = i % 5 === 0; // Marca más grande cada 5 minutos
-        const length = isHourMark ? 5 : 2.5; // Longitud de la marca desde el borde hacia adentro
-        // x1, y1: punto en el borde del círculo (radio = 50)
-        const x1 = 50 + 50 * Math.cos(angle * Math.PI / 180);
-        const y1 = 50 + 50 * Math.sin(angle * Math.PI / 180);
-        // x2, y2: punto hacia adentro (radio = 50 - length)
-        const x2 = 50 + (50 - length) * Math.cos(angle * Math.PI / 180);
-        const y2 = 50 + (50 - length) * Math.sin(angle * Math.PI / 180);
-        const strokeWidth = isHourMark ? 1.5 : 0.8;
-        marks += `<line class="clock-mark" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--text-secondary)" stroke-width="${strokeWidth}"/>`;
-    }
-    
-    return `<svg class="clock-marks" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">${marks}</svg>${numbers}`;
-}
 
 // ============================================
 // ACTUALIZACIÓN DEL RELOJ
@@ -387,54 +392,64 @@ function updateAllClocks() {
         }
     });
     
-    // Actualizar relojes analógicos
-    document.querySelectorAll('.analog-clock').forEach(clock => {
-        const timezone = clock.dataset.timezone;
-        updateAnalogClock(clock, now, timezone);
+    // Actualizar relojes digitales modernos
+    document.querySelectorAll('.time-display-modern').forEach(display => {
+        const timezone = display.dataset.timezone;
+        const timeString = formatTimeForTimezone(now, timezone);
+        
+        // Separar tiempo y AM/PM
+        const parts = timeString.split(' ');
+        const timeOnly = parts[0];
+        const amPm = parts[1] || '';
+        const [hours, minutes, seconds] = timeOnly.split(':');
+        
+        const hoursEl = display.querySelector('.time-hours');
+        const minutesEl = display.querySelector('.time-minutes');
+        const secondsEl = display.querySelector('.time-seconds');
+        const amPmEl = display.querySelector('.time-ampm');
+        const separatorEls = display.querySelectorAll('.time-separator');
+        
+        if (hoursEl) hoursEl.textContent = hours.padStart(2, '0');
+        if (minutesEl) minutesEl.textContent = minutes.padStart(2, '0');
+        
+        if (secondsEl && appState.showSeconds) {
+            secondsEl.textContent = (seconds || '00').padStart(2, '0');
+            secondsEl.style.display = 'inline-block';
+            if (separatorEls[1]) separatorEls[1].style.display = 'inline-block';
+        } else if (secondsEl) {
+            secondsEl.style.display = 'none';
+            if (separatorEls[1]) separatorEls[1].style.display = 'none';
+        }
+        
+        if (amPmEl) {
+            if (amPm) {
+                amPmEl.textContent = amPm;
+                amPmEl.style.display = 'inline-block';
+            } else {
+                amPmEl.style.display = 'none';
+            }
+        }
     });
-}
-
-function updateAnalogClock(clockElement, date, timezone) {
-    // Obtener hora en la zona horaria específica
-    const timeString = date.toLocaleString('en-US', { 
-        timeZone: timezone,
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+    
+    // Actualizar fechas en relojes modernos
+    document.querySelectorAll('.date-display-modern').forEach(display => {
+        const card = display.closest('.timezone-card');
+        const timezoneId = card.dataset.timezoneId;
+        const timezone = appState.timezones.find(tz => tz.id === timezoneId);
+        if (timezone) {
+            display.textContent = formatDateShortForTimezone(now, timezone.timezone);
+        }
     });
     
-    const [hours, minutes, seconds] = timeString.split(':').map(Number);
-    
-    // Calcular ángulos
-    // Hora: cada hora = 30 grados, cada minuto añade 0.5 grados
-    const hourAngle = (hours % 12) * 30 + minutes * 0.5;
-    // Minuto: cada minuto = 6 grados
-    const minuteAngle = minutes * 6;
-    // Segundo: cada segundo = 6 grados
-    const secondAngle = seconds * 6;
-    
-    // Aplicar rotación a las manecillas
-    const hourHand = clockElement.querySelector('.hour-hand');
-    const minuteHand = clockElement.querySelector('.minute-hand');
-    const secondHand = clockElement.querySelector('.second-hand');
-    
-    // Aplicar rotación con aceleración de hardware para mejor rendimiento en móviles
-    if (hourHand) {
-        hourHand.style.transform = `rotate(${hourAngle}deg) translateZ(0)`;
-        hourHand.style.webkitTransform = `rotate(${hourAngle}deg) translateZ(0)`;
-    }
-    if (minuteHand) {
-        minuteHand.style.transform = `rotate(${minuteAngle}deg) translateZ(0)`;
-        minuteHand.style.webkitTransform = `rotate(${minuteAngle}deg) translateZ(0)`;
-    }
-    if (secondHand && appState.showSeconds) {
-        secondHand.style.display = 'block';
-        secondHand.style.transform = `rotate(${secondAngle}deg) translateZ(0)`;
-        secondHand.style.webkitTransform = `rotate(${secondAngle}deg) translateZ(0)`;
-    } else if (secondHand) {
-        secondHand.style.display = 'none';
-    }
+    // Actualizar offsets en relojes modernos
+    document.querySelectorAll('.timezone-offset-modern').forEach(display => {
+        const card = display.closest('.timezone-card');
+        const timezoneId = card.dataset.timezoneId;
+        const timezone = appState.timezones.find(tz => tz.id === timezoneId);
+        if (timezone) {
+            display.textContent = getTimezoneOffset(timezone.timezone);
+        }
+    });
 }
 
 // ============================================
