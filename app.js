@@ -122,6 +122,7 @@ async function initializeApp() {
     // Llenar selectores de zonas horarias
     populateTimezoneSelects();
     
+    
     // Inicializar vista guardada después de cargar zonas horarias
     setTimeout(() => {
         if (appState.currentView && appState.currentView !== 'cards') {
@@ -791,18 +792,6 @@ function setupEventListeners() {
     if (stopAlarmBtn) {
         stopAlarmBtn.addEventListener('click', stopAlarm);
     }
-    
-    // Cerrar modal de alarma al hacer clic fuera (también detiene la alarma)
-    const activeAlarmModal = document.getElementById('activeAlarmModal');
-    if (activeAlarmModal) {
-        activeAlarmModal.addEventListener('click', (e) => {
-            // Solo cerrar si se hace clic directamente en el fondo del modal, no en el contenido
-            if (e.target.id === 'activeAlarmModal' || e.target === activeAlarmModal) {
-                console.log('Clic fuera del contenido del modal - cerrando');
-                stopAlarm();
-            }
-        });
-    }
 }
 
 function toggleTheme() {
@@ -1277,15 +1266,13 @@ async function stopAlarm() {
         appState.currentActiveAlarm = null;
     }
     
-    // Ocultar modal - asegurar que esté completamente oculto
-    const modal = document.getElementById('activeAlarmModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        // Limpiar cualquier estilo inline que pueda interferir
-        modal.removeAttribute('style');
+    // Desactivar animación de pulso en el botón
+    const stopAlarmBtn = document.getElementById('stopAlarmBtn');
+    if (stopAlarmBtn) {
+        stopAlarmBtn.classList.remove('active');
     }
     
-    console.log('✅ Alarma detenida, eliminada y modal cerrado');
+    console.log('✅ Alarma detenida, eliminada y botón ocultado');
 }
 
 function vibrateDevice(pattern = [200, 100, 200]) {
@@ -1309,42 +1296,12 @@ async function triggerAlarm(alarm) {
     // Marcar como disparada AHORA
     alarm.lastTriggered = new Date().toISOString();
     
-    // MOSTRAR MODAL SIEMPRE (independientemente de notificaciones)
-    console.log('🔔 Mostrando modal de alarma...');
-    const activeModal = document.getElementById('activeAlarmModal');
-    
-    if (!activeModal) {
-        console.error('❌ ERROR: No se encontró el modal activeAlarmModal en el DOM');
-        return;
+    // Activar animación de pulso en el botón cuando hay alarma activa
+    const stopAlarmBtn = document.getElementById('stopAlarmBtn');
+    if (stopAlarmBtn) {
+        stopAlarmBtn.classList.add('active');
+        console.log('✅ Animación de pulso activada en botón "Apagar Alarma"');
     }
-    
-    console.log('✅ Modal encontrado en DOM');
-    console.log('Estado inicial - Classes:', activeModal.className);
-    console.log('Estado inicial - Display:', window.getComputedStyle(activeModal).display);
-    
-    const nameEl = document.getElementById('activeAlarmName');
-    const timeEl = document.getElementById('activeAlarmTime');
-    
-    if (nameEl) {
-        nameEl.textContent = `⏰ ${alarm.name}`;
-        console.log('✅ Nombre de alarma actualizado:', alarm.name);
-    } else {
-        console.error('❌ No se encontró activeAlarmName');
-    }
-    
-    if (timeEl) {
-        timeEl.textContent = alarm.time;
-        console.log('✅ Hora de alarma actualizada:', alarm.time);
-    } else {
-        console.error('❌ No se encontró activeAlarmTime');
-    }
-    
-        // Asegurar que el modal esté visible - solo remover hidden, el CSS se encarga del resto
-        activeModal.classList.remove('hidden');
-        // No usar estilos inline para evitar conflictos con el CSS
-        // El CSS ya tiene todos los estilos necesarios con !important
-        
-        console.log('✅ Modal mostrado - clase hidden removida');
     
     // Reproducir sonido CONSTANTE (loop) - SIEMPRE si está configurado
     if (appState.alarmSound !== 'none') {
@@ -1879,49 +1836,3 @@ if ('Notification' in window && Notification.permission === 'default') {
     // No solicitamos inmediatamente, lo haremos cuando se cree una alarma
 }
 
-// Función de prueba para verificar el modal (disponible en consola)
-window.testAlarmModal = function() {
-    console.log('🧪 Probando modal de alarma...');
-    const activeModal = document.getElementById('activeAlarmModal');
-    if (!activeModal) {
-        console.error('❌ Modal no encontrado en el DOM');
-        return;
-    }
-    
-    const nameEl = document.getElementById('activeAlarmName');
-    const timeEl = document.getElementById('activeAlarmTime');
-    const stopBtn = document.getElementById('stopAlarmBtn');
-    
-    if (nameEl) nameEl.textContent = '⏰ Alarma de Prueba';
-    if (timeEl) timeEl.textContent = new Date().toLocaleTimeString();
-    
-    activeModal.classList.remove('hidden');
-    activeModal.style.display = 'flex';
-    activeModal.style.zIndex = '10000';
-    
-    // Configurar el botón para la prueba
-    if (stopBtn) {
-        const handleStop = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('🔕 Botón de prueba clickeado - cerrando modal');
-            activeModal.classList.add('hidden');
-            activeModal.style.display = 'none';
-        };
-        
-        stopBtn.onclick = handleStop;
-        stopBtn.addEventListener('click', handleStop);
-        stopBtn.style.pointerEvents = 'auto';
-        stopBtn.style.cursor = 'pointer';
-        
-        console.log('✅ Botón configurado para prueba');
-    }
-    
-    console.log('✅ Modal debería estar visible ahora');
-    console.log('Classes:', activeModal.className);
-    console.log('Display:', window.getComputedStyle(activeModal).display);
-    console.log('Z-index:', window.getComputedStyle(activeModal).zIndex);
-    console.log('💡 Haz clic en el botón "APAGAR ALARMA" para probarlo');
-    
-    // NO auto-cerrar, dejar que el usuario pruebe el botón
-};
