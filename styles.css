@@ -739,6 +739,11 @@ html[data-theme="dark"] .leaflet-control-attribution {
     margin-left: 0;
     margin-top: 0;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
 }
 
 .hour-hand {
@@ -1196,19 +1201,35 @@ footer {
         height: 140px;
     }
 
+    /* Reducir transición en móviles para mejor rendimiento */
+    .hour-hand,
+    .minute-hand,
+    .second-hand {
+        transition: transform 0.1s linear;
+    }
+
     .hour-hand {
         height: 40px;
+        top: 50%;
         margin-top: -40px;
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
     }
 
     .minute-hand {
         height: 56px;
+        top: 50%;
         margin-top: -56px;
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
     }
 
     .second-hand {
         height: 60px;
+        top: 50%;
         margin-top: -60px;
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
     }
 
     .modal-content {
@@ -1286,20 +1307,29 @@ footer {
 
     .hour-hand {
         height: 40px;
+        top: 50%;
         margin-top: -40px;
         width: 3px;
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
     }
 
     .minute-hand {
         height: 60px;
+        top: 50%;
         margin-top: -60px;
         width: 2px;
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
     }
 
     .second-hand {
         height: 65px;
+        top: 50%;
         margin-top: -65px;
         width: 1.5px;
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
     }
 }
 

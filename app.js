@@ -419,15 +419,19 @@ function updateAnalogClock(clockElement, date, timezone) {
     const minuteHand = clockElement.querySelector('.minute-hand');
     const secondHand = clockElement.querySelector('.second-hand');
     
+    // Aplicar rotación con aceleración de hardware para mejor rendimiento en móviles
     if (hourHand) {
-        hourHand.style.transform = `rotate(${hourAngle}deg)`;
+        hourHand.style.transform = `rotate(${hourAngle}deg) translateZ(0)`;
+        hourHand.style.webkitTransform = `rotate(${hourAngle}deg) translateZ(0)`;
     }
     if (minuteHand) {
-        minuteHand.style.transform = `rotate(${minuteAngle}deg)`;
+        minuteHand.style.transform = `rotate(${minuteAngle}deg) translateZ(0)`;
+        minuteHand.style.webkitTransform = `rotate(${minuteAngle}deg) translateZ(0)`;
     }
     if (secondHand && appState.showSeconds) {
         secondHand.style.display = 'block';
-        secondHand.style.transform = `rotate(${secondAngle}deg)`;
+        secondHand.style.transform = `rotate(${secondAngle}deg) translateZ(0)`;
+        secondHand.style.webkitTransform = `rotate(${secondAngle}deg) translateZ(0)`;
     } else if (secondHand) {
         secondHand.style.display = 'none';
     }
