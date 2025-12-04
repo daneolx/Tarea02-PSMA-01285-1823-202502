@@ -34,10 +34,14 @@ let appState = {
 document.addEventListener('DOMContentLoaded', async () => {
     await initializeApp();
     setupEventListeners();
+    
+    // Solicitar permisos de notificaciones al inicio
+    await requestNotificationPermission();
+    
+    setupServiceWorker();
     startClock();
     await loadAlarms();
     checkAlarms();
-    setupServiceWorker();
     
     // Verificar carga de Leaflet después de un momento
     setTimeout(() => {
@@ -46,6 +50,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }, 2000);
 });
+
+// Función para solicitar permisos de notificaciones
+async function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+                console.log('Permisos de notificaciones concedidos');
+            } else {
+                console.log('Permisos de notificaciones denegados');
+            }
+        } catch (error) {
+            console.error('Error al solicitar permisos:', error);
+        }
+    }
+}
 
 // ============================================
 // INICIALIZACIÓN
@@ -342,32 +362,43 @@ function getCityNameFromTimezone(timezone) {
 // ACTUALIZACIÓN DEL RELOJ
 // ============================================
 
-// Optimizar actualización de relojes usando requestAnimationFrame
-let lastUpdateTime = 0;
-function optimizedClockUpdate() {
-    const now = performance.now();
-    if (now - lastUpdateTime >= CONFIG.UPDATE_INTERVAL) {
-        updateAllClocks();
-        lastUpdateTime = now;
-    }
-    requestAnimationFrame(optimizedClockUpdate);
-}
+// Actualización del reloj usando setInterval para funcionar en segundo plano
+let clockInterval = null;
+let alarmInterval = null;
+let syncInterval = null;
 
 function startClock() {
+    // Actualizar inmediatamente
     updateAllClocks();
     
-    // Usar requestAnimationFrame para mejor rendimiento
-    optimizedClockUpdate();
+    // Limpiar intervalos anteriores si existen
+    if (clockInterval) clearInterval(clockInterval);
+    if (alarmInterval) clearInterval(alarmInterval);
+    if (syncInterval) clearInterval(syncInterval);
+    
+    // Actualizar reloj cada segundo (funciona incluso en segundo plano)
+    clockInterval = setInterval(() => {
+        updateAllClocks();
+    }, CONFIG.UPDATE_INTERVAL);
     
     // Actualizar alarmas cada segundo
-    setInterval(() => {
+    alarmInterval = setInterval(() => {
         checkAlarms();
     }, CONFIG.UPDATE_INTERVAL);
     
     // Sincronizar periódicamente con servidor
-    setInterval(async () => {
+    syncInterval = setInterval(async () => {
         await syncWithServer();
     }, CONFIG.SYNC_INTERVAL);
+    
+    // Mantener la app activa cuando está visible
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            // Cuando la app vuelve a ser visible, actualizar inmediatamente
+            updateAllClocks();
+            checkAlarms();
+        }
+    });
 }
 
 function updateAllClocks() {
@@ -963,32 +994,52 @@ async function triggerAlarm(alarm) {
         return;
     }
     
-    // Solicitar permiso para notificaciones
+    // Solicitar permiso para notificaciones si es necesario
     if (Notification.permission === 'default') {
-        await Notification.requestPermission();
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            console.log('Permiso de notificaciones denegado');
+            return;
+        }
     }
     
-    // Reproducir sonido
-    if (appState.alarmSound !== 'none') {
+    // Notificación visual (funciona incluso cuando la app está en segundo plano)
+    if (Notification.permission === 'granted') {
+        try {
+            const notification = new Notification(`⏰ ${alarm.name}`, {
+                body: `Es hora de: ${alarm.name}`,
+                icon: './icon-192.png',
+                badge: './icon-192.png',
+                tag: `alarm-${alarm.id}`,
+                requireInteraction: true,
+                vibrate: appState.vibrationEnabled ? [200, 100, 200, 100, 200] : undefined,
+                silent: appState.alarmSound === 'none',
+                timestamp: Date.now()
+            });
+            
+            // Manejar clic en la notificación
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+            };
+            
+            // Cerrar notificación después de 10 segundos (más tiempo para móviles)
+            setTimeout(() => {
+                notification.close();
+            }, 10000);
+        } catch (error) {
+            console.error('Error al mostrar notificación:', error);
+        }
+    }
+    
+    // Reproducir sonido (solo si la app está activa)
+    if (document.visibilityState === 'visible' && appState.alarmSound !== 'none') {
         playAlarmSound(appState.alarmSound);
     }
     
-    // Vibración
-    vibrateDevice([200, 100, 200, 100, 200]);
-    
-    // Notificación visual
-    if (Notification.permission === 'granted') {
-        const notification = new Notification(`⏰ ${alarm.name}`, {
-            body: `Es hora de: ${alarm.name}`,
-            icon: 'icon-192.png',
-            badge: 'icon-192.png',
-            tag: `alarm-${alarm.id}`,
-            requireInteraction: true,
-            silent: appState.alarmSound === 'none'
-        });
-        
-        // Cerrar notificación después de 5 segundos
-        setTimeout(() => notification.close(), 5000);
+    // Vibración (solo si la app está activa y está habilitada)
+    if (document.visibilityState === 'visible' && appState.vibrationEnabled) {
+        vibrateDevice([200, 100, 200, 100, 200]);
     }
     
     // Si es una alarma de una sola vez, deshabilitarla

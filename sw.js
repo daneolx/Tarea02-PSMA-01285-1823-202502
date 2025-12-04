@@ -73,3 +73,39 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// Manejar mensajes de la app principal para notificaciones
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, body, tag, icon } = event.data;
+    self.registration.showNotification(title, {
+      body: body,
+      icon: icon || './icon-192.png',
+      badge: './icon-192.png',
+      tag: tag,
+      requireInteraction: true,
+      vibrate: [200, 100, 200, 100, 200],
+      timestamp: Date.now()
+    });
+  }
+});
+
+// Manejar clics en notificaciones
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Si hay una ventana abierta, enfocarla
+      for (let i = 0; i < clientList.length; i++) {
+        const client = clientList[i];
+        if (client.url === '/' && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Si no hay ventana abierta, abrir una nueva
+      if (clients.openWindow) {
+        return clients.openWindow('./');
+      }
+    })
+  );
+});
+
