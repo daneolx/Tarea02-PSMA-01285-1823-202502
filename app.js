@@ -795,7 +795,9 @@ function setupEventListeners() {
     const activeAlarmModal = document.getElementById('activeAlarmModal');
     if (activeAlarmModal) {
         activeAlarmModal.addEventListener('click', (e) => {
-            if (e.target.id === 'activeAlarmModal') {
+            // Solo cerrar si se hace clic directamente en el fondo del modal, no en el contenido
+            if (e.target.id === 'activeAlarmModal' || e.target === activeAlarmModal) {
+                console.log('Clic fuera del contenido del modal - cerrando');
                 stopAlarm();
             }
         });
@@ -1072,14 +1074,14 @@ function checkAlarms() {
         
         // Comparar hora y minuto
         if (nowH === alarmH && nowM === alarmM) {
-            console.log(`Coincidencia de alarma: ${alarm.name} a las ${nowH}:${nowM}`);
+            console.log(`⏰ Coincidencia de alarma: ${alarm.name} a las ${nowH}:${nowM}`);
             
             // Verificar si ya se disparó en este minuto (para evitar múltiples disparos)
             const lastTriggeredDate = alarm.lastTriggered ? new Date(alarm.lastTriggered) : null;
             
             // Si se disparó hace menos de 60 segundos, ignorar
             if (lastTriggeredDate && (now.getTime() - lastTriggeredDate.getTime() < 60000)) {
-                // console.log('Alarma ya disparada en este minuto');
+                console.log('⏸️ Alarma ya disparada en este minuto - ignorando');
                 return;
             }
             
@@ -1092,8 +1094,13 @@ function checkAlarms() {
             else if (alarm.repeat === 'weekdays' && dayIndex >= 1 && dayIndex <= 5) shouldTrigger = true;
             else if (alarm.repeat === 'weekends' && (dayIndex === 0 || dayIndex === 6)) shouldTrigger = true;
             
+            console.log(`📅 Día de la semana: ${dayIndex}, Repetición: ${alarm.repeat}, Debe disparar: ${shouldTrigger}`);
+            
             if (shouldTrigger) {
+                console.log(`🚀 Disparando alarma: ${alarm.name}`);
                 triggerAlarm(alarm);
+            } else {
+                console.log(`⏭️ Alarma ${alarm.name} no debe dispararse hoy (día ${dayIndex}, repetición: ${alarm.repeat})`);
             }
         }
     });
@@ -1230,34 +1237,46 @@ function startAlarmLoop(soundType) {
 }
 
 function stopAlarm() {
+    console.log('🛑 stopAlarm() llamado');
+    
     // Limpiar intervalo de repetición
     if (appState.activeAlarmInterval) {
         clearInterval(appState.activeAlarmInterval);
         appState.activeAlarmInterval = null;
+        console.log('✅ Intervalo de alarma detenido');
     }
     
     // Detener todos los osciladores activos
+    let stoppedCount = 0;
     appState.activeAlarmOscillators.forEach(osc => {
         try {
             osc.stop();
+            stoppedCount++;
         } catch (e) {
             // Ignorar errores si ya estaba detenido
+            console.log('Oscilador ya estaba detenido');
         }
     });
+    console.log(`✅ ${stoppedCount} osciladores detenidos`);
     appState.activeAlarmOscillators = [];
     
     // Detener vibración si está activa
     if ('vibrate' in navigator) {
         navigator.vibrate(0); // 0 detiene cualquier vibración en curso
+        console.log('✅ Vibración detenida');
     }
     
     // Ocultar modal
     const modal = document.getElementById('activeAlarmModal');
     if (modal) {
         modal.classList.add('hidden');
+        modal.style.display = 'none'; // Forzar ocultar
+        console.log('✅ Modal ocultado');
+    } else {
+        console.error('❌ No se encontró el modal para ocultar');
     }
     
-    console.log('Alarma detenida');
+    console.log('✅ Alarma completamente detenida');
 }
 
 function vibrateDevice(pattern = [200, 100, 200]) {
@@ -1267,100 +1286,146 @@ function vibrateDevice(pattern = [200, 100, 200]) {
 }
 
 async function triggerAlarm(alarm) {
+    console.log('🔔 triggerAlarm llamado para:', alarm.name);
+    
     // Verificar modo No Molestar
     if (isDNDActive()) {
         console.log('Modo No Molestar activo - alarma silenciada');
-        return;
-    }
-    
-    // Verificar si las notificaciones están habilitadas
-    if (!appState.notificationsEnabled) {
         return;
     }
 
     // Marcar como disparada AHORA
     alarm.lastTriggered = new Date().toISOString();
     
-    // Solicitar permiso para notificaciones si es necesario
-    if (Notification.permission === 'default') {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-            console.log('Permiso de notificaciones denegado');
-            // Aún así intentamos reproducir sonido
-        }
-    }
-    
-    // Intentar usar Service Worker para notificación
-    let notificationSent = false;
-    
-    // Verificar si el SW está listo
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        console.log('Enviando notificación vía Service Worker');
-        navigator.serviceWorker.controller.postMessage({
-            type: 'SHOW_NOTIFICATION',
-            title: `⏰ ${alarm.name}`,
-            body: `Es hora de: ${alarm.name}`,
-            tag: `alarm-${alarm.id}`,
-            icon: './icon-192.png'
-        });
-        notificationSent = true;
-    } else {
-        console.log('Service Worker no controlado, usando notificación local');
-    }
-
-    // Fallback a notificación normal
-    // Intentamos esto SIEMPRE si hay permiso, como respaldo
-    if (Notification.permission === 'granted') {
-        try {
-            // En móviles a veces la notificación del SW no vibra si la pantalla está encendida,
-            // así que intentamos la local también (los navegadores modernos suelen deducir duplicados)
-            const notification = new Notification(`⏰ ${alarm.name}`, {
-                body: `Es hora de: ${alarm.name}`,
-                icon: './icon-192.png',
-                badge: './icon-192.png',
-                tag: `alarm-${alarm.id}`,
-                requireInteraction: true,
-                vibrate: appState.vibrationEnabled ? [200, 100, 200, 100, 200] : undefined,
-                silent: appState.alarmSound === 'none',
-                timestamp: Date.now()
-            });
-            
-            notification.onclick = () => {
-                window.focus();
-                notification.close();
-            };
-            
-            setTimeout(() => {
-                notification.close();
-            }, 10000);
-            
-            console.log('Notificación local disparada');
-        } catch (error) {
-            console.error('Error al mostrar notificación local:', error);
-        }
-    } else {
-        console.log('Permiso de notificaciones no concedido:', Notification.permission);
-    }
-    
-    // Mostrar modal de alarma activa
+    // MOSTRAR MODAL SIEMPRE (independientemente de notificaciones)
+    console.log('Mostrando modal de alarma...');
     const activeModal = document.getElementById('activeAlarmModal');
     if (activeModal) {
         const nameEl = document.getElementById('activeAlarmName');
         const timeEl = document.getElementById('activeAlarmTime');
+        const stopBtn = document.getElementById('stopAlarmBtn');
+        
         if (nameEl) nameEl.textContent = `⏰ ${alarm.name}`;
         if (timeEl) timeEl.textContent = alarm.time;
         
+        // Asegurar que el modal esté visible
         activeModal.classList.remove('hidden');
+        activeModal.style.display = 'flex'; // Forzar display flex
+        activeModal.style.zIndex = '10000'; // Asegurar z-index alto
+        
+        // Asegurar que el botón tenga el event listener (por si acaso)
+        if (stopBtn) {
+            // Limpiar cualquier listener anterior
+            stopBtn.replaceWith(stopBtn.cloneNode(true));
+            const newStopBtn = document.getElementById('stopAlarmBtn');
+            
+            if (newStopBtn) {
+                // Agregar múltiples formas de capturar el evento para asegurar que funcione
+                const handleStop = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log('🔕 Botón de detener alarma clickeado');
+                    stopAlarm();
+                    return false;
+                };
+                
+                // Event listener moderno
+                newStopBtn.addEventListener('click', handleStop, { capture: true });
+                newStopBtn.addEventListener('click', handleStop, { capture: false });
+                
+                // También usar onclick como fallback
+                newStopBtn.onclick = handleStop;
+                
+                // Asegurar que el botón sea clickeable
+                newStopBtn.style.pointerEvents = 'auto';
+                newStopBtn.style.cursor = 'pointer';
+                newStopBtn.style.position = 'relative';
+                newStopBtn.style.zIndex = '10001';
+                
+                console.log('✅ Event listeners agregados al botón de detener alarma');
+                console.log('Botón ID:', newStopBtn.id);
+                console.log('Botón classes:', newStopBtn.className);
+            } else {
+                console.error('❌ No se pudo encontrar el botón después de clonarlo');
+            }
+        } else {
+            console.error('❌ No se encontró el botón stopAlarmBtn');
+        }
+        
+        console.log('✅ Modal mostrado - clase hidden removida, display:', activeModal.style.display);
+        console.log('Modal classes:', activeModal.className);
+    } else {
+        console.error('❌ No se encontró el modal activeAlarmModal');
     }
     
-    // Reproducir sonido CONSTANTE (loop)
+    // Reproducir sonido CONSTANTE (loop) - SIEMPRE si está configurado
     if (appState.alarmSound !== 'none') {
+        console.log('Reproduciendo sonido de alarma:', appState.alarmSound);
         startAlarmLoop(appState.alarmSound);
     }
     
-    // Vibración inicial
+    // Vibración inicial - SIEMPRE si está habilitada
     if (appState.vibrationEnabled) {
         vibrateDevice([200, 100, 200, 100, 200]);
+    }
+    
+    // Notificaciones del navegador (solo si están habilitadas)
+    if (appState.notificationsEnabled) {
+        // Solicitar permiso para notificaciones si es necesario
+        if (Notification.permission === 'default') {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.log('Permiso de notificaciones denegado');
+            }
+        }
+        
+        // Intentar usar Service Worker para notificación
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            console.log('Enviando notificación vía Service Worker');
+            navigator.serviceWorker.controller.postMessage({
+                type: 'SHOW_NOTIFICATION',
+                title: `⏰ ${alarm.name}`,
+                body: `Es hora de: ${alarm.name}`,
+                tag: `alarm-${alarm.id}`,
+                icon: './icon-192.png'
+            });
+        } else {
+            console.log('Service Worker no controlado, usando notificación local');
+        }
+
+        // Fallback a notificación normal
+        if (Notification.permission === 'granted') {
+            try {
+                const notification = new Notification(`⏰ ${alarm.name}`, {
+                    body: `Es hora de: ${alarm.name}`,
+                    icon: './icon-192.png',
+                    badge: './icon-192.png',
+                    tag: `alarm-${alarm.id}`,
+                    requireInteraction: true,
+                    vibrate: appState.vibrationEnabled ? [200, 100, 200, 100, 200] : undefined,
+                    silent: appState.alarmSound === 'none',
+                    timestamp: Date.now()
+                });
+                
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+                
+                setTimeout(() => {
+                    notification.close();
+                }, 10000);
+                
+                console.log('Notificación local disparada');
+            } catch (error) {
+                console.error('Error al mostrar notificación local:', error);
+            }
+        } else {
+            console.log('Permiso de notificaciones no concedido:', Notification.permission);
+        }
+    } else {
+        console.log('Notificaciones deshabilitadas - solo modal y sonido');
     }
     
     // Si es una alarma de una sola vez, deshabilitarla
@@ -1826,3 +1891,50 @@ function updateTimezoneCard(timezoneId) {
 if ('Notification' in window && Notification.permission === 'default') {
     // No solicitamos inmediatamente, lo haremos cuando se cree una alarma
 }
+
+// Función de prueba para verificar el modal (disponible en consola)
+window.testAlarmModal = function() {
+    console.log('🧪 Probando modal de alarma...');
+    const activeModal = document.getElementById('activeAlarmModal');
+    if (!activeModal) {
+        console.error('❌ Modal no encontrado en el DOM');
+        return;
+    }
+    
+    const nameEl = document.getElementById('activeAlarmName');
+    const timeEl = document.getElementById('activeAlarmTime');
+    const stopBtn = document.getElementById('stopAlarmBtn');
+    
+    if (nameEl) nameEl.textContent = '⏰ Alarma de Prueba';
+    if (timeEl) timeEl.textContent = new Date().toLocaleTimeString();
+    
+    activeModal.classList.remove('hidden');
+    activeModal.style.display = 'flex';
+    activeModal.style.zIndex = '10000';
+    
+    // Configurar el botón para la prueba
+    if (stopBtn) {
+        const handleStop = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔕 Botón de prueba clickeado - cerrando modal');
+            activeModal.classList.add('hidden');
+            activeModal.style.display = 'none';
+        };
+        
+        stopBtn.onclick = handleStop;
+        stopBtn.addEventListener('click', handleStop);
+        stopBtn.style.pointerEvents = 'auto';
+        stopBtn.style.cursor = 'pointer';
+        
+        console.log('✅ Botón configurado para prueba');
+    }
+    
+    console.log('✅ Modal debería estar visible ahora');
+    console.log('Classes:', activeModal.className);
+    console.log('Display:', window.getComputedStyle(activeModal).display);
+    console.log('Z-index:', window.getComputedStyle(activeModal).zIndex);
+    console.log('💡 Haz clic en el botón "APAGAR ALARMA" para probarlo');
+    
+    // NO auto-cerrar, dejar que el usuario pruebe el botón
+};

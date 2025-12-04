@@ -1038,6 +1038,10 @@ html[data-theme="dark"] .btn-primary:hover {
     letter-spacing: 1px;
     transition: all 0.3s ease;
     box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    position: relative;
+    z-index: 10001 !important;
 }
 
 .active-alarm-modal .btn-danger:hover {
@@ -1048,6 +1052,13 @@ html[data-theme="dark"] .btn-primary:hover {
 
 .active-alarm-modal .btn-danger:active {
     transform: scale(0.98);
+}
+
+/* Asegurar que el contenido del modal no bloquee los clics */
+.alarm-ringing-content {
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 10001 !important;
 }
 
 .modal-header {
