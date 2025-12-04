@@ -32,16 +32,18 @@ let appState = {
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', async () => {
-    await initializeApp();
+    // Iniciar reloj inmediatamente para que los segundos avancen
+    startClock();
+
+    initializeApp(); // No esperar a que termine
     setupEventListeners();
     
-    // Solicitar permisos de notificaciones al inicio
-    await requestNotificationPermission();
+    // Solicitar permisos de notificaciones (sin bloquear)
+    requestNotificationPermission();
     
     setupServiceWorker();
-    startClock();
-    await loadAlarms();
-    checkAlarms();
+    // startClock ya fue llamado arriba
+    loadAlarms().then(() => checkAlarms());
     
     // Verificar carga de Leaflet después de un momento
     setTimeout(() => {
@@ -86,8 +88,8 @@ async function initializeApp() {
     // Cargar zonas horarias guardadas o agregar la local por defecto
     loadTimezones();
     
-    // Sincronizar con servidor
-    await syncWithServer();
+    // Sincronizar con servidor (sin await para no bloquear)
+    syncWithServer();
     
     // Llenar selectores de zonas horarias
     populateTimezoneSelects();
@@ -226,15 +228,27 @@ function createTimezoneCard(timezone) {
                 <div class="digital-clock-inner">
                     <div class="time-display-modern" data-timezone="${timezone.timezone}">
                         ${(() => {
+                            // Obtener hora completa con segundos siempre para asegurar que existan
+                            const timeWithSeconds = now.toLocaleString('en-US', {
+                                timeZone: timezone.timezone,
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            });
                             const timeParts = time.split(' ');
                             const timeOnly = timeParts[0];
                             const amPm = timeParts[1] || '';
-                            const [hours, minutes, seconds] = timeOnly.split(':');
+                            const [hours, minutes] = timeOnly.split(':');
+                            // Obtener segundos del string completo
+                            const secondsParts = timeWithSeconds.split(':');
+                            const seconds = secondsParts.length >= 3 ? secondsParts[2] : '00';
                             return `
                                 <span class="time-hours">${hours}</span>
                                 <span class="time-separator">:</span>
                                 <span class="time-minutes">${minutes}</span>
-                                ${appState.showSeconds ? `<span class="time-separator">:</span><span class="time-seconds">${seconds || '00'}</span>` : ''}
+                                <span class="time-separator" style="${appState.showSeconds ? '' : 'display:none;'}">:</span>
+                                <span class="time-seconds" style="${appState.showSeconds ? '' : 'display:none;'}">${seconds}</span>
                                 ${amPm ? `<span class="time-ampm">${amPm}</span>` : ''}
                             `;
                         })()}
@@ -378,7 +392,13 @@ function startClock() {
     
     // Actualizar reloj cada segundo (funciona incluso en segundo plano)
     // Usar función nombrada para mejor debugging
+    let updateCount = 0;
     function updateClock() {
+        updateCount++;
+        // Log cada 10 segundos para no saturar la consola
+        if (updateCount % 10 === 0) {
+            console.log('Reloj actualizado', updateCount, 'veces');
+        }
         updateAllClocks();
     }
     
@@ -392,6 +412,8 @@ function startClock() {
         setTimeout(() => startClock(), 1000);
         return;
     }
+    
+    console.log('Intervalo iniciado. ID:', clockInterval);
     
     // Actualizar alarmas cada segundo
     alarmInterval = setInterval(() => {
@@ -421,6 +443,8 @@ function startClock() {
 }
 
 function updateAllClocks() {
+    // Crear nueva fecha en cada llamada para asegurar que sea actual
+    // IMPORTANTE: Crear nueva instancia de Date en cada llamada
     const now = new Date();
     if (appState.timeOffset !== 0) {
         now.setTime(now.getTime() + appState.timeOffset);
@@ -446,8 +470,20 @@ function updateAllClocks() {
     document.querySelectorAll('.time-display-modern').forEach(display => {
         const timezone = display.dataset.timezone;
         
-        // Obtener hora en la zona horaria específica usando Intl.DateTimeFormat
-        // Asegurar que SIEMPRE incluya segundos
+        // IMPORTANTE: Crear una NUEVA fecha en cada iteración del bucle
+        // para asegurar que los segundos sean actuales
+        const currentTime = new Date();
+        if (appState.timeOffset !== 0) {
+            currentTime.setTime(currentTime.getTime() + appState.timeOffset);
+        }
+        
+        // Obtener elementos del DOM primero
+        const hoursEl = display.querySelector('.time-hours');
+        const minutesEl = display.querySelector('.time-minutes');
+        const amPmEl = display.querySelector('.time-ampm');
+        const separatorEls = display.querySelectorAll('.time-separator');
+        
+        // Obtener hora actual en la zona horaria
         const formatter = new Intl.DateTimeFormat('en-US', {
             timeZone: timezone,
             hour: '2-digit',
@@ -456,38 +492,23 @@ function updateAllClocks() {
             hour12: false
         });
         
-        // Verificar que el formatter está configurado correctamente
-        if (!formatter) {
-            console.error('Error: No se pudo crear el formatter para', timezone);
-        }
-        
-        const parts = formatter.formatToParts(now);
-        let hours = 0, minutes = 0, seconds = 0;
+        const parts = formatter.formatToParts(currentTime);
+        let hours = 0, minutes = 0;
         
         parts.forEach(part => {
             if (part.type === 'hour') hours = parseInt(part.value, 10);
             if (part.type === 'minute') minutes = parseInt(part.value, 10);
-            if (part.type === 'second') seconds = parseInt(part.value, 10);
         });
         
-        // Verificar que los segundos se obtuvieron correctamente
-        // Si no, calcularlos usando un método alternativo
-        if (isNaN(seconds) || seconds === undefined) {
-            // Método alternativo: usar toLocaleString y parsear
-            const timeStr = now.toLocaleString('en-US', {
-                timeZone: timezone,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            });
-            const timeParts = timeStr.split(':');
-            if (timeParts.length >= 3) {
-                seconds = parseInt(timeParts[2], 10);
-            } else {
-                // Último recurso: usar los segundos de la fecha local
-                seconds = now.getSeconds();
-            }
+        // Validar horas y minutos
+        hours = isNaN(hours) ? 0 : Math.max(0, Math.min(23, hours));
+        minutes = isNaN(minutes) ? 0 : Math.max(0, Math.min(59, minutes));
+        
+        // IMPORTANTE: Los segundos son los mismos en todas las zonas horarias
+        // Obtener directamente de la fecha actual creada en esta iteración
+        let seconds = currentTime.getSeconds();
+        if (isNaN(seconds) || seconds < 0 || seconds > 59) {
+            seconds = 0;
         }
         
         // Formatear según el formato de hora configurado
@@ -506,56 +527,64 @@ function updateAllClocks() {
             amPm = hours >= 12 ? 'PM' : 'AM';
         }
         
-        const hoursEl = display.querySelector('.time-hours');
-        const minutesEl = display.querySelector('.time-minutes');
-        const secondsEl = display.querySelector('.time-seconds');
-        const amPmEl = display.querySelector('.time-ampm');
-        const separatorEls = display.querySelectorAll('.time-separator');
-        
-        // Actualizar horas y minutos solo si han cambiado (optimización)
+        // Actualizar horas
         if (hoursEl) {
-            const hoursText = String(displayHours).padStart(2, '0');
-            if (hoursEl.textContent !== hoursText) {
-                hoursEl.textContent = hoursText;
-            }
+            hoursEl.textContent = String(displayHours).padStart(2, '0');
         }
+        
+        // Actualizar minutos
         if (minutesEl) {
-            const minutesText = String(minutes).padStart(2, '0');
-            if (minutesEl.textContent !== minutesText) {
-                minutesEl.textContent = minutesText;
+            minutesEl.textContent = String(minutes).padStart(2, '0');
+        }
+        
+        // Buscar o crear elemento de segundos
+        let finalSecondsEl = display.querySelector('.time-seconds');
+        
+        // Si no existe y debería existir, crearlo
+        if (!finalSecondsEl && appState.showSeconds) {
+            const minutesElForInsert = display.querySelector('.time-minutes');
+            if (minutesElForInsert) {
+                // Crear separador si no existe
+                let sep2 = separatorEls[1];
+                if (!sep2) {
+                    sep2 = document.createElement('span');
+                    sep2.className = 'time-separator';
+                    sep2.textContent = ':';
+                    minutesElForInsert.parentNode.insertBefore(sep2, minutesElForInsert.nextSibling);
+                }
+                // Crear elemento de segundos
+                finalSecondsEl = document.createElement('span');
+                finalSecondsEl.className = 'time-seconds';
+                finalSecondsEl.style.display = 'inline-block';
+                if (sep2.nextSibling) {
+                    sep2.parentNode.insertBefore(finalSecondsEl, sep2.nextSibling);
+                } else {
+                    sep2.parentNode.appendChild(finalSecondsEl);
+                }
             }
         }
         
-        // SIEMPRE actualizar segundos (sin condición de optimización)
-        if (secondsEl && appState.showSeconds) {
+        // ACTUALIZAR SEGUNDOS
+        if (finalSecondsEl && appState.showSeconds) {
             const secondsText = String(seconds).padStart(2, '0');
-            // Forzar actualización siempre - usar innerText en lugar de textContent para forzar repintado
-            if (secondsEl.textContent !== secondsText) {
-                secondsEl.textContent = secondsText;
-            } else {
-                // Si el valor es el mismo, forzar actualización de todas formas
-                secondsEl.textContent = secondsText;
-                // Forzar repintado del navegador usando múltiples métodos
-                secondsEl.style.visibility = 'hidden';
-                secondsEl.offsetHeight; // Trigger reflow
-                secondsEl.style.visibility = 'visible';
-            }
-            secondsEl.style.display = 'inline-block';
+            finalSecondsEl.textContent = secondsText;
+            
+            // Asegurar visibilidad
+            finalSecondsEl.style.display = 'inline-block';
             if (separatorEls[1]) {
                 separatorEls[1].style.display = 'inline-block';
             }
-        } else if (secondsEl) {
-            secondsEl.style.display = 'none';
+        } else if (finalSecondsEl && !appState.showSeconds) {
+            finalSecondsEl.style.display = 'none';
             if (separatorEls[1]) {
                 separatorEls[1].style.display = 'none';
             }
         }
         
+        // Actualizar AM/PM
         if (amPmEl) {
             if (use12Hour && amPm) {
-                if (amPmEl.textContent !== amPm) {
-                    amPmEl.textContent = amPm;
-                }
+                amPmEl.textContent = amPm;
                 amPmEl.style.display = 'inline-block';
             } else {
                 amPmEl.style.display = 'none';
@@ -590,7 +619,15 @@ function updateAllClocks() {
 
 async function syncWithServer() {
     try {
-        const response = await fetch('https://worldtimeapi.org/api/ip');
+        // Usar AbortController para timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos timeout
+
+        const response = await fetch('https://worldtimeapi.org/api/ip', {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         const data = await response.json();
         const serverTime = new Date(data.datetime);
         const localTime = new Date();
