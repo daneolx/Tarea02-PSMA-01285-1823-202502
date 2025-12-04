@@ -54,49 +54,137 @@
         <div class="instructions">
             <h3>Instrucciones:</h3>
             <ol>
-                <li>Haz clic en "Generar Icono 192x192" para crear el icono pequeño</li>
-                <li>Haz clic derecho en el canvas y "Guardar imagen como..." → guarda como "icon-192.png"</li>
-                <li>Haz clic en "Generar Icono 512x512" para crear el icono grande</li>
-                <li>Haz clic derecho en el canvas y "Guardar imagen como..." → guarda como "icon-512.png"</li>
+                <li>Haz clic en "Generar y Descargar Icono 192x192" para crear y descargar el icono pequeño</li>
+                <li>Haz clic en "Generar y Descargar Icono 512x512" para crear y descargar el icono grande</li>
                 <li>Coloca ambos archivos en la misma carpeta que index.html</li>
             </ol>
         </div>
 
         <div>
-            <button onclick="generateIcon(192)">Generar Icono 192x192</button>
-            <button onclick="generateIcon(512)">Generar Icono 512x512</button>
+            <button onclick="generateAndDownload(192)">Generar y Descargar Icono 192x192</button>
+            <button onclick="generateAndDownload(512)">Generar y Descargar Icono 512x512</button>
+            <button onclick="generateBoth()">Generar y Descargar Ambos</button>
         </div>
 
         <canvas id="iconCanvas" width="512" height="512"></canvas>
     </div>
 
     <script>
+        function drawClock(ctx, size) {
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const radius = size * 0.35;
+            const padding = size * 0.1;
+
+            // Fondo del reloj (círculo blanco)
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Borde del reloj
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = size * 0.03;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Marcas de horas
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = size * 0.015;
+            for (let i = 0; i < 12; i++) {
+                const angle = (i * Math.PI * 2 / 12) - Math.PI / 2;
+                const startX = centerX + Math.cos(angle) * (radius * 0.75);
+                const startY = centerY + Math.sin(angle) * (radius * 0.75);
+                const endX = centerX + Math.cos(angle) * (radius * 0.9);
+                const endY = centerY + Math.sin(angle) * (radius * 0.9);
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            }
+
+            // Manecillas (mostrando las 3:00)
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = size * 0.02;
+            ctx.lineCap = 'round';
+
+            // Manecilla de horas (apunta a las 3)
+            const hourAngle = (3 * Math.PI * 2 / 12) - Math.PI / 2;
+            const hourLength = radius * 0.5;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(
+                centerX + Math.cos(hourAngle) * hourLength,
+                centerY + Math.sin(hourAngle) * hourLength
+            );
+            ctx.stroke();
+
+            // Manecilla de minutos (apunta a las 12)
+            const minuteAngle = -Math.PI / 2;
+            const minuteLength = radius * 0.7;
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = size * 0.015;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(
+                centerX + Math.cos(minuteAngle) * minuteLength,
+                centerY + Math.sin(minuteAngle) * minuteLength
+            );
+            ctx.stroke();
+
+            // Centro del reloj
+            ctx.fillStyle = '#667eea';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, size * 0.03, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         function generateIcon(size) {
             const canvas = document.getElementById('iconCanvas');
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
 
-            // Fondo con gradiente
+            // Fondo con gradiente (mismo que la app)
             const gradient = ctx.createLinearGradient(0, 0, size, size);
             gradient.addColorStop(0, '#667eea');
             gradient.addColorStop(1, '#764ba2');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, size, size);
 
-            // Dibujar icono de nota
-            ctx.fillStyle = 'white';
-            ctx.font = `bold ${size * 0.4}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('📝', size / 2, size / 2);
+            // Dibujar reloj
+            drawClock(ctx, size);
 
-            // Borde redondeado (simulado)
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = size * 0.02;
-            ctx.beginPath();
-            ctx.roundRect(0, 0, size, size, size * 0.1);
-            ctx.stroke();
+            return canvas;
+        }
+
+        function downloadCanvas(canvas, filename) {
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+        }
+
+        function generateAndDownload(size) {
+            const canvas = generateIcon(size);
+            const filename = `icon-${size}.png`;
+            downloadCanvas(canvas, filename);
+        }
+
+        function generateBoth() {
+            setTimeout(() => {
+                generateAndDownload(192);
+            }, 100);
+            setTimeout(() => {
+                generateAndDownload(512);
+            }, 500);
         }
 
         // Generar icono inicial
