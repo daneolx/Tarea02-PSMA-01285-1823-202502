@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Reloj Digital Inteligente - Múltiples zonas horarias, alarmas y más">
+    <meta name="theme-color" content="#000000">
+    <title>🕒 Reloj Digital Inteligente</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-title-section">
+                    <div class="header-icon">🕒</div>
+                    <div>
+                        <h1>Reloj Digital Inteligente</h1>
+                        <p class="header-subtitle">Múltiples zonas horarias • Alarmas • Sincronización automática</p>
+                    </div>
+                </div>
+                <div class="header-controls">
+                    <button id="themeToggle" class="btn-icon" aria-label="Cambiar tema">
+                        <span id="themeIcon">🌙</span>
+                    </button>
+                    <button id="settingsToggle" class="btn-icon" aria-label="Configuración">
+                        ⚙️
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Panel de configuración -->
+            <div id="settingsPanel" class="settings-panel hidden">
+                <h2>Configuración</h2>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="showSeconds">
+                        Mostrar segundos
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <label>
+                        Formato de hora:
+                        <select id="hourFormat">
+                            <option value="auto">Automático (sistema)</option>
+                            <option value="12">12 horas (AM/PM)</option>
+                            <option value="24">24 horas</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="enableNotifications">
+                        Habilitar notificaciones
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <label>
+                        Sonido de alarma:
+                        <select id="alarmSound">
+                            <option value="default">Predeterminado</option>
+                            <option value="bell">Campana</option>
+                            <option value="chime">Carillón</option>
+                            <option value="beep">Beep</option>
+                            <option value="none">Sin sonido</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="enableVibration">
+                        Vibración en alarmas
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <label>
+                        Modo No Molestar:
+                        <select id="dndMode">
+                            <option value="off">Desactivado</option>
+                            <option value="night">Noche (22:00 - 7:00)</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <button id="syncTimeBtn" class="btn btn-secondary">
+                        🔄 Sincronizar con servidor
+                    </button>
+                    <div id="syncStatus" class="sync-status"></div>
+                </div>
+            </div>
+
+            <!-- Vista de Visualizaciones -->
+            <div class="visualizations-section">
+                <h2>Visualizaciones</h2>
+                <div class="view-toggle">
+                    <button id="cardViewBtn" class="view-btn active">📋 Tarjetas</button>
+                    <button id="mapViewBtn" class="view-btn">🌍 Mapa Mundial</button>
+                    <button id="compareViewBtn" class="view-btn">⚖️ Comparar</button>
+                </div>
+                <div id="mapView" class="visualization-view hidden">
+                    <div class="map-container" id="mapContainer"></div>
+                </div>
+                <div id="compareView" class="visualization-view hidden">
+                    <div class="compare-container" id="compareContainer"></div>
+                </div>
+            </div>
+
+            <!-- Zonas horarias -->
+            <div id="timezonesContainer" class="timezones-container">
+                <!-- Las zonas horarias se agregarán dinámicamente -->
+            </div>
+
+            <!-- Controles de zonas horarias -->
+            <div class="controls">
+                <button id="addTimezoneBtn" class="btn btn-primary">
+                    ➕ Agregar Zona Horaria
+                </button>
+            </div>
+
+            <!-- Panel de alarmas -->
+            <div class="alarms-section">
+                <h2>⏰ Alarmas</h2>
+                <button id="addAlarmBtn" class="btn btn-primary">
+                    ➕ Nueva Alarma
+                </button>
+                <div id="alarmsList" class="alarms-list">
+                    <!-- Las alarmas se mostrarán aquí -->
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="footer-content">
+                <p id="statusIndicator" class="status-indicator">🟢 Sincronizado</p>
+                <div class="footer-credits">
+                    <div class="group-label">Grupo 04</div>
+                    <div class="members-list">
+                        <span class="member-name">David Cantorín Ortega</span>
+                        <span class="member-separator">•</span>
+                        <span class="member-name">Anibal Huaman</span>
+                        <span class="member-separator">•</span>
+                        <span class="member-name">Karen Medrano</span>
+                        <span class="member-separator">•</span>
+                        <span class="member-name">Sulmairy Garcia</span>
+                        <span class="member-separator">•</span>
+                        <span class="member-name">Diego Arrieta</span>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal de Créditos -->
+    <div id="creditsModal" class="modal hidden">
+        <div class="modal-content credits-modal">
+            <div class="modal-header">
+                <h2>Grupo 04</h2>
+                <button class="modal-close" id="closeCreditsBtn" aria-label="Cerrar">×</button>
+            </div>
+            <div class="credits-content">
+                <p class="credits-subtitle">Integrantes:</p>
+                <ul class="credits-list">
+                    <li>
+                        <span class="credit-name">David Cantorín Ortega</span>
+                    </li>
+                    <li>
+                        <span class="credit-name">Anibal Huaman</span>
+                    </li>
+                    <li>
+                        <span class="credit-name">Karen Medrano</span>
+                    </li>
+                    <li>
+                        <span class="credit-name">Sulmairy Garcia</span>
+                    </li>
+                    <li>
+                        <span class="credit-name">Diego Arrieta</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar zona horaria -->
+    <div id="timezoneModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Agregar Zona Horaria</h2>
+            <label>
+                Nombre de la ciudad:
+                <input type="text" id="cityNameInput" placeholder="Ej: Nueva York">
+            </label>
+            <label>
+                Zona horaria:
+                <select id="timezoneSelect">
+                    <!-- Se llenará dinámicamente -->
+                </select>
+            </label>
+            <div class="modal-actions">
+                <button id="saveTimezoneBtn" class="btn btn-primary">Guardar</button>
+                <button id="cancelTimezoneBtn" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar alarma -->
+    <div id="alarmModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Nueva Alarma</h2>
+            <label>
+                Nombre:
+                <input type="text" id="alarmNameInput" placeholder="Ej: Reunión importante">
+            </label>
+            <label>
+                Hora:
+                <input type="time" id="alarmTimeInput">
+            </label>
+            <label>
+                Zona horaria:
+                <select id="alarmTimezoneSelect">
+                    <!-- Se llenará dinámicamente -->
+                </select>
+            </label>
+            <label>
+                Repetir:
+                <select id="alarmRepeatSelect">
+                    <option value="once">Una vez</option>
+                    <option value="daily">Diariamente</option>
+                    <option value="weekdays">Días laborables</option>
+                    <option value="weekends">Fines de semana</option>
+                </select>
+            </label>
+            <div class="modal-actions">
+                <button id="saveAlarmBtn" class="btn btn-primary">Guardar</button>
+                <button id="cancelAlarmBtn" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <script src="app.js"></script>
+</body>
+</html>
