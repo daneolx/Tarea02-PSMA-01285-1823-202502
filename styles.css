@@ -866,10 +866,25 @@ html[data-theme="dark"] .leaflet-control-attribution {
     color: white;
 }
 
+html:not([data-theme="dark"]) .btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+html[data-theme="dark"] .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
 .btn-primary:hover {
     background: var(--primary-dark);
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+}
+
+html[data-theme="dark"] .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.5);
 }
 
 .btn-secondary {
