@@ -70,6 +70,29 @@ async function requestNotificationPermission() {
 }
 
 // ============================================
+// GESTIÓN DE AUDIO (Unlock AudioContext)
+// ============================================
+let globalAudioContext = null;
+
+function initAudioContext() {
+    if (!globalAudioContext) {
+        globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    
+    // Intentar reanudar si está suspendido (común en navegadores modernos)
+    if (globalAudioContext.state === 'suspended') {
+        globalAudioContext.resume().then(() => {
+            console.log('AudioContext reanudado por interacción de usuario');
+        });
+    }
+}
+
+// Desbloquear audio en cualquier interacción
+document.addEventListener('click', initAudioContext, { once: false });
+document.addEventListener('touchstart', initAudioContext, { once: false });
+document.addEventListener('keydown', initAudioContext, { once: false });
+
+// ============================================
 // INICIALIZACIÓN
 // ============================================
 
@@ -752,6 +775,11 @@ function setupEventListeners() {
             document.getElementById('creditsModal').classList.add('hidden');
         }
     });
+    
+    // Desbloquear audio en la primera interacción del usuario
+    ['click', 'touchstart', 'keydown'].forEach(event => {
+        document.body.addEventListener(event, unlockAudio, { once: true });
+    });
 }
 
 function toggleTheme() {
@@ -1024,11 +1052,14 @@ function checkAlarms() {
         
         // Comparar hora y minuto
         if (nowH === alarmH && nowM === alarmM) {
+            console.log(`Coincidencia de alarma: ${alarm.name} a las ${nowH}:${nowM}`);
+            
             // Verificar si ya se disparó en este minuto (para evitar múltiples disparos)
             const lastTriggeredDate = alarm.lastTriggered ? new Date(alarm.lastTriggered) : null;
             
             // Si se disparó hace menos de 60 segundos, ignorar
             if (lastTriggeredDate && (now.getTime() - lastTriggeredDate.getTime() < 60000)) {
+                // console.log('Alarma ya disparada en este minuto');
                 return;
             }
             
@@ -1072,51 +1103,86 @@ function isDNDActive() {
     return false;
 }
 
+// Variables globales para audio
+let audioCtx = null;
+
+function initAudioContext() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtx;
+}
+
+function unlockAudio() {
+    if (!audioCtx) initAudioContext();
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume().then(() => {
+            console.log('AudioContext activado por usuario');
+        }).catch(e => console.error('Error activando audio:', e));
+    }
+}
+
 function playAlarmSound(soundType) {
     if (soundType === 'none') return;
     
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+    // Asegurar que el contexto existe
+    const ctx = initAudioContext();
+    
+    // Intentar reanudar si está suspendido (puede fallar si no hay interacción previa)
+    if (ctx.state === 'suspended') {
+        ctx.resume();
+    }
+    
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
     
     oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+    gainNode.connect(ctx.destination);
     
     // Configurar según el tipo de sonido
     switch(soundType) {
         case 'bell':
             oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.5);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.5);
+            gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
             oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.5);
+            oscillator.stop(ctx.currentTime + 0.5);
             break;
         case 'chime':
             oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
-            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            oscillator.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+            gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.0);
             oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.3);
+            oscillator.stop(ctx.currentTime + 1.0);
             break;
         case 'beep':
             oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(1000, audioContext.currentTime);
-            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+            oscillator.frequency.setValueAtTime(1000, ctx.currentTime);
+            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
             oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.2);
+            oscillator.stop(ctx.currentTime + 0.5);
             break;
         default:
-            // Sonido predeterminado
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.4);
+            // Sonido predeterminado (tipo alarma digital)
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(880, ctx.currentTime); // A5
+            
+            // Patrón de beep-beep-beep
+            const now = ctx.currentTime;
+            
+            gainNode.gain.setValueAtTime(0.5, now);
+            gainNode.gain.setValueAtTime(0, now + 0.1);
+            gainNode.gain.setValueAtTime(0.5, now + 0.2);
+            gainNode.gain.setValueAtTime(0, now + 0.3);
+            gainNode.gain.setValueAtTime(0.5, now + 0.4);
+            gainNode.gain.setValueAtTime(0, now + 0.5);
+            
+            oscillator.start(now);
+            oscillator.stop(now + 0.6);
     }
 }
 
@@ -1150,26 +1216,30 @@ async function triggerAlarm(alarm) {
         }
     }
     
-    // Intentar usar Service Worker para notificación (más robusto en PWA/Móvil)
+    // Intentar usar Service Worker para notificación
     let notificationSent = false;
+    
+    // Verificar si el SW está listo
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        try {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'SHOW_NOTIFICATION',
-                title: `⏰ ${alarm.name}`,
-                body: `Es hora de: ${alarm.name}`,
-                tag: `alarm-${alarm.id}`,
-                icon: './icon-192.png'
-            });
-            notificationSent = true;
-        } catch (e) {
-            console.error('Error enviando mensaje a SW:', e);
-        }
+        console.log('Enviando notificación vía Service Worker');
+        navigator.serviceWorker.controller.postMessage({
+            type: 'SHOW_NOTIFICATION',
+            title: `⏰ ${alarm.name}`,
+            body: `Es hora de: ${alarm.name}`,
+            tag: `alarm-${alarm.id}`,
+            icon: './icon-192.png'
+        });
+        notificationSent = true;
+    } else {
+        console.log('Service Worker no controlado, usando notificación local');
     }
 
-    // Fallback a notificación normal si no se pudo usar SW
-    if (!notificationSent && Notification.permission === 'granted') {
+    // Fallback a notificación normal
+    // Intentamos esto SIEMPRE si hay permiso, como respaldo
+    if (Notification.permission === 'granted') {
         try {
+            // En móviles a veces la notificación del SW no vibra si la pantalla está encendida,
+            // así que intentamos la local también (los navegadores modernos suelen deducir duplicados)
             const notification = new Notification(`⏰ ${alarm.name}`, {
                 body: `Es hora de: ${alarm.name}`,
                 icon: './icon-192.png',
@@ -1189,9 +1259,13 @@ async function triggerAlarm(alarm) {
             setTimeout(() => {
                 notification.close();
             }, 10000);
+            
+            console.log('Notificación local disparada');
         } catch (error) {
-            console.error('Error al mostrar notificación:', error);
+            console.error('Error al mostrar notificación local:', error);
         }
+    } else {
+        console.log('Permiso de notificaciones no concedido:', Notification.permission);
     }
     
     // Reproducir sonido (SIN verificar visibilidad para asegurar alarma)
