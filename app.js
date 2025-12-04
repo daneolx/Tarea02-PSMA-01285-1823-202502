@@ -28,6 +28,8 @@ let appState = {
     dndMode: 'off',
     currentView: 'cards', // cards, map, compare
     loadedTimezones: new Set(), // Para lazy loading
+    activeAlarmInterval: null, // Intervalo de la alarma sonando
+    activeAlarmOscillators: [] // Osciladores activos para detenerlos
 };
 
 // Inicialización
@@ -91,6 +93,14 @@ function initAudioContext() {
 document.addEventListener('click', initAudioContext, { once: false });
 document.addEventListener('touchstart', initAudioContext, { once: false });
 document.addEventListener('keydown', initAudioContext, { once: false });
+
+// Event listener para detener alarma desde el modal
+document.addEventListener('DOMContentLoaded', () => {
+    const stopBtn = document.getElementById('stopAlarmBtn');
+    if (stopBtn) {
+        stopBtn.addEventListener('click', stopAlarm);
+    }
+});
 
 // ============================================
 // INICIALIZACIÓN
@@ -1122,13 +1132,13 @@ function unlockAudio() {
     }
 }
 
-function playAlarmSound(soundType) {
+function playAlarmSound(soundType, loop = false) {
     if (soundType === 'none') return;
     
     // Asegurar que el contexto existe
     const ctx = initAudioContext();
     
-    // Intentar reanudar si está suspendido (puede fallar si no hay interacción previa)
+    // Intentar reanudar si está suspendido
     if (ctx.state === 'suspended') {
         ctx.resume();
     }
@@ -1139,40 +1149,46 @@ function playAlarmSound(soundType) {
     oscillator.connect(gainNode);
     gainNode.connect(ctx.destination);
     
+    // Guardar referencia para poder detenerlo
+    appState.activeAlarmOscillators.push(oscillator);
+    // Limpiar osciladores detenidos del array
+    oscillator.onended = () => {
+        appState.activeAlarmOscillators = appState.activeAlarmOscillators.filter(osc => osc !== oscillator);
+    };
+    
+    const now = ctx.currentTime;
+
     // Configurar según el tipo de sonido
     switch(soundType) {
         case 'bell':
             oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(800, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.5);
-            gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-            oscillator.start();
-            oscillator.stop(ctx.currentTime + 0.5);
+            oscillator.frequency.setValueAtTime(800, now);
+            oscillator.frequency.exponentialRampToValueAtTime(100, now + 1.5);
+            gainNode.gain.setValueAtTime(0.5, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 1.5);
+            oscillator.start(now);
+            if (!loop) oscillator.stop(now + 1.5);
             break;
         case 'chime':
             oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-            gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.0);
-            oscillator.start();
-            oscillator.stop(ctx.currentTime + 1.0);
+            oscillator.frequency.setValueAtTime(523.25, now); // C5
+            gainNode.gain.setValueAtTime(0.5, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
+            oscillator.start(now);
+            if (!loop) oscillator.stop(now + 1.0);
             break;
         case 'beep':
             oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(1000, ctx.currentTime);
-            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-            oscillator.start();
-            oscillator.stop(ctx.currentTime + 0.5);
+            oscillator.frequency.setValueAtTime(1000, now);
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            oscillator.start(now);
+            if (!loop) oscillator.stop(now + 0.5);
             break;
         default:
             // Sonido predeterminado (tipo alarma digital)
             oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(880, ctx.currentTime); // A5
-            
-            // Patrón de beep-beep-beep
-            const now = ctx.currentTime;
+            oscillator.frequency.setValueAtTime(880, now); // A5
             
             gainNode.gain.setValueAtTime(0.5, now);
             gainNode.gain.setValueAtTime(0, now + 0.1);
@@ -1182,8 +1198,51 @@ function playAlarmSound(soundType) {
             gainNode.gain.setValueAtTime(0, now + 0.5);
             
             oscillator.start(now);
-            oscillator.stop(now + 0.6);
+            if (!loop) oscillator.stop(now + 0.6);
     }
+}
+
+function startAlarmLoop(soundType) {
+    // Detener cualquier loop anterior
+    stopAlarm();
+    
+    // Reproducir inmediatamente
+    playAlarmSound(soundType);
+    
+    // Configurar intervalo para repetir (cada 2 segundos es un buen ritmo para alarma)
+    // Esto crea el efecto de "sonido constante" repitiendo el patrón
+    appState.activeAlarmInterval = setInterval(() => {
+        playAlarmSound(soundType);
+        if (appState.vibrationEnabled) {
+            vibrateDevice([200, 100, 200, 100, 200]);
+        }
+    }, 2000);
+}
+
+function stopAlarm() {
+    // Limpiar intervalo de repetición
+    if (appState.activeAlarmInterval) {
+        clearInterval(appState.activeAlarmInterval);
+        appState.activeAlarmInterval = null;
+    }
+    
+    // Detener todos los osciladores activos
+    appState.activeAlarmOscillators.forEach(osc => {
+        try {
+            osc.stop();
+        } catch (e) {
+            // Ignorar errores si ya estaba detenido
+        }
+    });
+    appState.activeAlarmOscillators = [];
+    
+    // Ocultar modal
+    const modal = document.getElementById('activeAlarmModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    
+    console.log('Alarma detenida');
 }
 
 function vibrateDevice(pattern = [200, 100, 200]) {
@@ -1268,13 +1327,23 @@ async function triggerAlarm(alarm) {
         console.log('Permiso de notificaciones no concedido:', Notification.permission);
     }
     
-    // Reproducir sonido (SIN verificar visibilidad para asegurar alarma)
-    if (appState.alarmSound !== 'none') {
-        // Intentar desbloquear AudioContext si está suspendido
-        playAlarmSound(appState.alarmSound);
+    // Mostrar modal de alarma activa
+    const activeModal = document.getElementById('activeAlarmModal');
+    if (activeModal) {
+        const nameEl = document.getElementById('activeAlarmName');
+        const timeEl = document.getElementById('activeAlarmTime');
+        if (nameEl) nameEl.textContent = `⏰ ${alarm.name}`;
+        if (timeEl) timeEl.textContent = alarm.time;
+        
+        activeModal.classList.remove('hidden');
     }
     
-    // Vibración (SIN verificar visibilidad)
+    // Reproducir sonido CONSTANTE (loop)
+    if (appState.alarmSound !== 'none') {
+        startAlarmLoop(appState.alarmSound);
+    }
+    
+    // Vibración inicial
     if (appState.vibrationEnabled) {
         vibrateDevice([200, 100, 200, 100, 200]);
     }

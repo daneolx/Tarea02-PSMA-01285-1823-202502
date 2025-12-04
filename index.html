@@ -257,6 +257,16 @@
         </div>
     </div>
 
+    <!-- Modal de Alarma Activa -->
+    <div id="activeAlarmModal" class="modal hidden active-alarm-modal">
+        <div class="modal-content alarm-ringing-content" style="text-align: center; animation: pulse 2s infinite;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">⏰</div>
+            <h2 id="activeAlarmName" style="margin-bottom: 0.5rem; font-size: 2rem;">¡Alarma!</h2>
+            <p id="activeAlarmTime" style="font-size: 1.5rem; margin-bottom: 2rem; color: var(--text-secondary);">00:00</p>
+            <button id="stopAlarmBtn" class="btn btn-danger" style="font-size: 1.2rem; padding: 1rem 2rem; width: 100%;">🔕 APAGAR ALARMA</button>
+        </div>
+    </div>
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
