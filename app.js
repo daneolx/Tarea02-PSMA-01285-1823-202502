@@ -1142,8 +1142,16 @@ function unlockAudio() {
 function playAlarmSound(soundType, loop = false) {
     if (soundType === 'none') return;
     
-    // Asegurar que el contexto existe
-    const ctx = initAudioContext();
+    // Asegurar que el contexto existe - usar el mismo que se inicializa al principio
+    if (!globalAudioContext) {
+        initAudioContext();
+    }
+    const ctx = globalAudioContext || audioCtx;
+    
+    if (!ctx) {
+        console.error('No se pudo crear AudioContext');
+        return;
+    }
     
     // Intentar reanudar si está suspendido
     if (ctx.state === 'suspended') {
@@ -1156,11 +1164,13 @@ function playAlarmSound(soundType, loop = false) {
     oscillator.connect(gainNode);
     gainNode.connect(ctx.destination);
     
-    // Guardar referencia para poder detenerlo
-    appState.activeAlarmOscillators.push(oscillator);
+    // Guardar referencia tanto del oscilador como del gainNode para poder detenerlos
+    const audioNode = { oscillator, gainNode };
+    appState.activeAlarmOscillators.push(audioNode);
+    
     // Limpiar osciladores detenidos del array
     oscillator.onended = () => {
-        appState.activeAlarmOscillators = appState.activeAlarmOscillators.filter(osc => osc !== oscillator);
+        appState.activeAlarmOscillators = appState.activeAlarmOscillators.filter(node => node !== audioNode);
     };
     
     const now = ctx.currentTime;
@@ -1229,28 +1239,105 @@ function startAlarmLoop(soundType) {
 async function stopAlarm() {
     console.log('🛑 stopAlarm() llamado');
     
-    // Limpiar intervalo de repetición
+    // PRIMERO: Limpiar intervalo de repetición para evitar que se creen más osciladores
     if (appState.activeAlarmInterval) {
         clearInterval(appState.activeAlarmInterval);
         appState.activeAlarmInterval = null;
+        console.log('✅ Intervalo de alarma detenido');
     }
     
-    // Detener todos los osciladores activos
-    appState.activeAlarmOscillators.forEach(osc => {
+    // SEGUNDO: Detener todos los osciladores activos y desconectarlos
+    let stoppedCount = 0;
+    const now = (globalAudioContext || audioCtx)?.currentTime || 0;
+    
+    appState.activeAlarmOscillators.forEach(audioNode => {
         try {
-            osc.stop();
+            // Puede ser un objeto con oscillator y gainNode, o solo el oscillator
+            const osc = audioNode.oscillator || audioNode;
+            const gain = audioNode.gainNode;
+            
+            // Reducir el volumen a 0 inmediatamente (esto es más efectivo que detener)
+            if (gain) {
+                try {
+                    gain.gain.cancelScheduledValues(now);
+                    gain.gain.setValueAtTime(0, now);
+                } catch (e) {
+                    // Ignorar errores
+                }
+            }
+            
+            // Detener el oscilador
+            if (osc) {
+                try {
+                    if (osc.state === 'running' || osc.state === 'started') {
+                        osc.stop(now);
+                        stoppedCount++;
+                    }
+                } catch (e) {
+                    // Intentar detener de todas formas
+                    try {
+                        osc.stop();
+                        stoppedCount++;
+                    } catch (e2) {
+                        console.log('Oscilador ya detenido');
+                    }
+                }
+                
+                // Desconectar del contexto de audio
+                if (osc.disconnect) {
+                    try {
+                        osc.disconnect();
+                    } catch (e) {
+                        // Ignorar errores de desconexión
+                    }
+                }
+            }
+            
+            // Desconectar gainNode si existe
+            if (gain && gain.disconnect) {
+                try {
+                    gain.disconnect();
+                } catch (e) {
+                    // Ignorar errores
+                }
+            }
         } catch (e) {
-            // Ignorar errores si ya estaba detenido
+            console.log('Error al detener nodo de audio:', e.message);
         }
     });
+    console.log(`✅ ${stoppedCount} osciladores detenidos`);
+    
+    // Limpiar el array de osciladores
     appState.activeAlarmOscillators = [];
     
-    // Detener vibración si está activa
+    // TERCERO: Detener vibración si está activa
     if ('vibrate' in navigator) {
         navigator.vibrate(0); // 0 detiene cualquier vibración en curso
+        console.log('✅ Vibración detenida');
     }
     
-    // Eliminar la alarma automáticamente si existe
+    // CUARTO: Detener cualquier sonido que pueda estar reproduciéndose
+    // Intentar detener todos los nodos de audio activos
+    if (globalAudioContext && globalAudioContext.state !== 'closed') {
+        try {
+            // Suspender el contexto de audio temporalmente para detener todo
+            if (globalAudioContext.state === 'running') {
+                globalAudioContext.suspend().then(() => {
+                    console.log('✅ AudioContext suspendido');
+                    // Reanudar después de un momento para permitir futuras reproducciones
+                    setTimeout(() => {
+                        if (globalAudioContext.state === 'suspended') {
+                            globalAudioContext.resume();
+                        }
+                    }, 100);
+                });
+            }
+        } catch (e) {
+            console.log('No se pudo suspender AudioContext:', e.message);
+        }
+    }
+    
+    // QUINTO: Eliminar la alarma automáticamente si existe
     if (appState.currentActiveAlarm) {
         const alarmId = appState.currentActiveAlarm.id;
         console.log('🗑️ Eliminando alarma automáticamente:', appState.currentActiveAlarm.name);
@@ -1266,13 +1353,13 @@ async function stopAlarm() {
         appState.currentActiveAlarm = null;
     }
     
-    // Desactivar animación de pulso en el botón
+    // SEXTO: Desactivar animación de pulso en el botón
     const stopAlarmBtn = document.getElementById('stopAlarmBtn');
     if (stopAlarmBtn) {
         stopAlarmBtn.classList.remove('active');
     }
     
-    console.log('✅ Alarma detenida, eliminada y botón ocultado');
+    console.log('✅ Alarma completamente detenida');
 }
 
 function vibrateDevice(pattern = [200, 100, 200]) {
